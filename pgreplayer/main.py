@@ -55,6 +55,7 @@ def parse_file(file):
 
         # Parse the lines
         for line in lines:
+            # debug(line)
             # EOF
             if len(line) == 0:
                 execute(query, params)
@@ -65,8 +66,8 @@ def parse_file(file):
             # 2. Len of the packet
             # 3. The data of the packet
             type_ = chr(line[0])
-            len_ = line[1]
-            data = line[2:]
+            len_ = line[1:5]
+            data = line[5:]
 
             # Query or prepared statement
             if type_ in ["Q", "P"]:
@@ -79,31 +80,45 @@ def parse_file(file):
             elif type_ == "B":
                 params.append(data)
 
+            # Execute
+            elif type_ == "E":
+                execute(query, params)
+
             # Save the state
             prev_state = type_
+        if query is not None:
+            execute(query, params)
 
+
+def debug(line):
+    print("Parsing: ", "".join(list(map(lambda x: chr(x), list(line)))))
 
 def execute(query, params):
     """Execute the query with params if any."""
     # Dummy
-    print("Executing: ", query, params)
+    pass
+    print("Executing: ", "".join(list(map(lambda x: chr(x), list(query)))))
 
 
 def main():
     """Main loop. Poll."""
-    while True:
-        tmp_file = "{}.{}".format(QUERY_FILE_PATH, random_string(10))
+    # while True:
+    tmp_file = "{}.{}".format(QUERY_FILE_PATH, random_string(10))
 
-        # "Copy" the file
-        with open("{}.lock".format(QUERY_FILE_PATH), "wb") as f:
-            fcntl.flock(f, LOCK_EX)
-            os.rename(QUERY_FILE_PATH, tmp_file)
+    # "Copy" the file
+    with open("{}.lock".format(QUERY_FILE_PATH), "wb") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        os.rename(QUERY_FILE_PATH, tmp_file)
 
-            # Touch new file
-            open(QUERY_FILE_PATH, "a").close()
+        # Touch new file
+        open(QUERY_FILE_PATH, "a").close()
+    parse_file(tmp_file)
     # Done
 
 
+
+if __name__ == '__main__':
+    main()
 
 
 
