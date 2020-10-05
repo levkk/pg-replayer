@@ -17,30 +17,6 @@
 #include "parameter.h"
 
 /*
- * Convert between 4 bytes of network data and a 32 bit integer.
- */
-uint32_t parse_uint32(char *data) {
-  unsigned a, b, c, d;
-  a = data[0];
-  b = data[1];
-  c = data[2];
-  d = data[3];
-
-  uint32_t result = (a << 24) | (b << 16) | (c << 8) | d;
-  return result;
-}
-
-/*
- * Convert between 2 bytes of network data and a 16 bit integer.
- */
-uint16_t parse_uint16(char *data) {
-  unsigned a, b;
-  a = data[0];
-  b = data[1];
-  return (a << 8) | (b);
-}
-
-/*
  * Check the result of our query.
  */
 int check_result(PGresult *res, PGconn *conn, char *query) {
@@ -98,14 +74,16 @@ void do_exit(PGconn *conn) {
 }
 
 /*
- * Will execute a query.
+ * Will execute a simple query.
  */
 void exec(char *query, PGconn *conn) {
   PGresult *res = PQexec(conn, query);
   check_result(res, conn, query);
 }
 
-
+/*
+ * Entrypoint.
+ */
 int main() {
   FILE *f;
   char *line, *it;

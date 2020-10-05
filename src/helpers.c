@@ -1,6 +1,30 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/*
+ * Convert between 4 bytes of network data and a 32 bit integer.
+ */
+uint32_t parse_uint32(char *data) {
+  unsigned a, b, c, d;
+  a = data[0];
+  b = data[1];
+  c = data[2];
+  d = data[3];
+
+  uint32_t result = (a << 24) | (b << 16) | (c << 8) | d;
+  return result;
+}
+
+/*
+ * Convert between 2 bytes of network data and a 16 bit integer.
+ */
+uint16_t parse_uint16(char *data) {
+  unsigned a, b;
+  a = data[0];
+  b = data[1];
+  return (a << 8) | (b);
+}
+
 // https://stackoverflow.com/questions/7775991/how-to-get-hexdump-of-a-structure-data
 void hexDump (const char * desc, const void * addr, const int len) {
     int i;

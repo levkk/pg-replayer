@@ -12,4 +12,14 @@ void hexDump(const char * desc, const void * addr, const int len);
  */
 void free_safe(void *ptr);
 
+/*
+ * Convert between 4 bytes of network data and a 32 bit integer.
+ */
+uint32_t parse_uint32(char *data);
+
+/*
+ * Convert between 2 bytes of network data and a 16 bit integer.
+ */
+uint16_t parse_uint16(char *data);
+
 #endif
