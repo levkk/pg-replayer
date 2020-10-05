@@ -8,14 +8,12 @@
 #include <assert.h>
 #include <arpa/inet.h>
 
-#include "helpers.h"
-#include "statement.h"
-#include "parameter.h"
-
 #define DELIMETER '\x19' /* EM */
 #define DEBUG 1
 
-void hexDump(const char *, const void *, const int);
+#include "helpers.h"
+#include "statement.h"
+#include "parameter.h"
 
 /*
  * Convert between 4 bytes of network data and a 32 bit integer.
@@ -75,7 +73,7 @@ int main() {
 
   char *fname = getenv("PACKET_FILE");
 
-  if (strlen(fname) == 0) {
+  if (fname == NULL) {
     f = fopen("/tmp/pktlog", "r");
   }
   else {
@@ -89,7 +87,12 @@ int main() {
 
   struct PStatement *stmt = NULL;
 
-  while ((nread = getdelim(&line, &line_len, DELIMETER, f)) != -1) {
+  while ((nread = getdelim(&line, &line_len, DELIMETER, f)) > 0) {
+    /* Not enough data to be a valid line. */
+    if (line_len < 5) {
+      continue;
+    }
+
     /* Place the iterator at the beginning. */
     it = line;
 
