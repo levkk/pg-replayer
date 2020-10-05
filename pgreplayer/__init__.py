@@ -1,3 +1,0 @@
-"""Init"""
-
-from .main import *
