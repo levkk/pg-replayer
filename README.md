@@ -3,11 +3,11 @@
 A tool that reads Postgres packets from a file and replays them against a database of your choice. The packets have to be '\x19' separated in the input file.
 
 ## Why
-It's hard to deploy new databases without benchmarks & the only benchmarks that really matter are your production traffic. This will simulate it
+It's hard to deploy new databases without benchmarks & the only benchmarks that really matter are your production traffic. This will simulate it.
 
 ## Installation
 
-1. Make sure you have `libpq-dev` (Linux/) or `brew install postgresql` (Mac OS).
+1. Make sure you have `libpq-dev` (Linux) or `brew install postgresql` (Mac OS).
 2. `make`
 
 This will produce the binary `player` in the root directory of this repository.
