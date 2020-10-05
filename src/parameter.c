@@ -24,7 +24,7 @@ struct Parameter *parameter_init(int32_t len, char *value) {
 void parameter_debug(struct Parameter *param) {
 	assert(param != NULL);
 
-	printf("DEBUG: Parameter(len=%d, value='%s')\n", param->len, param->value);
+	printf("[Debug]: Parameter(len=%d, value='%s')\n", param->len, param->value);
 }
 
 /*

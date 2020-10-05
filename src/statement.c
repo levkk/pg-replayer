@@ -55,7 +55,7 @@ void pstatement_debug(struct PStatement *stmt) {
 		}
 	}
 
-	printf("DEBUG: PStatement(query=[%s])\n", stmt->query);
+	printf("[Debug]: PStatement(query=[%s])\n", stmt->query);
 
 	for (i = 0; i < stmt->np; i++) {
 		parameter_debug(stmt->params[i]);

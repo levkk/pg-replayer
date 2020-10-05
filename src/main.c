@@ -7,6 +7,7 @@
 #include <string.h>
 #include <assert.h>
 #include <arpa/inet.h>
+#include <libpq-fe.h>
 
 #define DELIMETER '\x19' /* EM */
 #define DEBUG 1
@@ -39,30 +40,67 @@ uint16_t parse_uint16(char *data) {
   return (a << 8) | (b);
 }
 
-/*
- * Will execute a preparted statement.
- */
-int pexec(char *query, char **params, size_t param_len) {
-  if (DEBUG) {
-    printf("Preparted statement: %s\n", query);
+int check_result(PGresult *res, PGconn *conn, char *query) {
+  int code = PQresultStatus(res);
 
-    int i;
-    for (i = 0; i < param_len; i++) {
-      printf("Param: %s\n", params[i]);
+  switch(code) {
+    case PGRES_TUPLES_OK:
+    case PGRES_COMMAND_OK: {
+      if (DEBUG)
+        printf("[Postgres] Executed: %s\n", query);
+      break;
+    }
+    default: {
+      char *err = PQerrorMessage(conn);
+      printf("[%d] Error: %s\n", code, err);
+      break;
     }
   }
 
-  /* TODO: execute the query */
-  return 0;
+  PQclear(res);
+
+  return code;
+}
+
+/*
+ * Will execute a preparted statement against the connection.
+ */
+void pexec(struct PStatement *stmt, PGconn *conn) {
+  int i;
+  const char *params[stmt->np];
+
+  for (i = 0; i < stmt->np; i++) {
+    params[i] = stmt->params[i]->value;
+  }
+
+  /* Send the prepared statement over. */
+  PGresult *res = PQexecParams(
+    conn,
+    stmt->query,
+    stmt->np,
+    NULL,
+    params,
+    NULL,
+    NULL,
+    0
+  );
+
+  check_result(res, conn, stmt->query);
+}
+
+void do_exit(PGconn *conn) {
+  PQfinish(conn);
+  exit(1);
 }
 
 /*
  * Will execute a query.
  */
-int exec(char *query) {
-  //printf("Query: %s\n", query);
-  return 0;
+void exec(char *query, PGconn *conn) {
+  PGresult *res = PQexec(conn, query);
+  check_result(res, conn, query);
 }
+
 
 int main() {
   FILE *f;
@@ -83,6 +121,24 @@ int main() {
   if (f == NULL) {
     printf("Could not open packet log.");
     exit(1);
+  }
+
+  int libpq_version = PQlibVersion();
+  printf("libpq version: %d\n", libpq_version);
+
+  char *pg_conn = getenv("DATABASE_URL");
+
+  if (pg_conn == NULL) {
+    fprintf(stderr, "DATABASE_URL environment variable is required but not set.\n");
+    exit(1);
+  }
+
+  PGconn *conn = PQconnectdb(pg_conn);
+
+  if (PQstatus(conn) == CONNECTION_BAD) {
+      fprintf(stderr, "Connection to database failed: %s\n",
+        PQerrorMessage(conn));
+      do_exit(conn);
   }
 
   struct PStatement *stmt = NULL;
@@ -106,7 +162,7 @@ int main() {
 
     /* Simple query, 'Q' packet */
     if (tag == 'Q') {
-      exec(it);
+      exec(it, conn);
     }
 
     /* Prepared statement, 'P' packet */
@@ -158,6 +214,7 @@ int main() {
 
     /* Execute the prepared statement, 'E' packet */
     else if (tag == 'E') {
+      pexec(stmt, conn);
       pstatement_debug(stmt);
       pstatement_free(stmt);
     }

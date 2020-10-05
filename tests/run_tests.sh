@@ -4,6 +4,13 @@
 # Run the tests.
 #
 
+# Change me to fit your local env
+export DATABASE_URL="postgres://postgres:root@localhost:6000/postgres"
+
+# Required for a "smooth" test
+psql $DATABASE_URL -c "CREATE TABLE IF NOT EXISTS users (id BIGSERIAL);"
+
+# Test file
 export PACKET_FILE="$(pwd)/tests/testdata.bin"
 
 if [[ ! -d .git ]]; then
