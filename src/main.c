@@ -207,4 +207,5 @@ int main() {
 
   free(line);
   fclose(f);
+  do_exit(conn);
 }
