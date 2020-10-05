@@ -40,6 +40,9 @@ uint16_t parse_uint16(char *data) {
   return (a << 8) | (b);
 }
 
+/*
+ * Check the result of our query.
+ */
 int check_result(PGresult *res, PGconn *conn, char *query) {
   int code = PQresultStatus(res);
 
@@ -88,6 +91,7 @@ void pexec(struct PStatement *stmt, PGconn *conn) {
   check_result(res, conn, stmt->query);
 }
 
+/* Cleanly exit the Postgres connection and abort. */
 void do_exit(PGconn *conn) {
   PQfinish(conn);
   exit(1);
