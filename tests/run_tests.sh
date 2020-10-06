@@ -25,8 +25,12 @@ fi
 
 echo "Using $PACKET_FILE for test data."
 
-valgrind --leak-check=full \
-         --show-leak-kinds=all \
-         --track-origins=yes \
-         --verbose \
-         ./player
+if which valrind; then
+	valgrind --leak-check=full \
+	         --show-leak-kinds=all \
+	         --track-origins=yes \
+	         --verbose \
+	         ./player
+else
+	./player
+fi

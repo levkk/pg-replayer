@@ -159,6 +159,12 @@ int main() {
       char *stmt_name = it;
       char *query = it + strlen(stmt_name) + 1; /* +1 for the NULL character. */
 
+      if (stmt != NULL) {
+        printf("Statement is not flushed, packets out of order. \n");
+        pstatement_free(stmt);
+        exit(1);
+      }
+
       stmt = pstatement_init(query);
     }
 
@@ -202,6 +208,7 @@ int main() {
       pexec(stmt, conn);
       pstatement_debug(stmt);
       pstatement_free(stmt);
+      stmt = NULL;
     }
 
     /* Clear the line buffer */
