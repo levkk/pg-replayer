@@ -1,6 +1,6 @@
 FROM postgres:latest
 
-RUN apt-get update && apt-get install build-essential libpq-dev sudo -y
+RUN apt-get update && apt-get install build-essential libpq-dev sudo valgrind -y
 
 COPY . /app
 

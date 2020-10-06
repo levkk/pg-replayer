@@ -25,4 +25,8 @@ fi
 
 echo "Using $PACKET_FILE for test data."
 
-./player
+valgrind --leak-check=full \
+         --show-leak-kinds=all \
+         --track-origins=yes \
+         --verbose \
+         ./player
