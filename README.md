@@ -1,6 +1,6 @@
 # pg-replayer
 
-A tool that reads packets from a dump file and replays logical statements against a databae of your choice. The packets have to be `\x19`-separated in the input file.
+A tool that reads packets from a dump file and replays logical statements against a database of your choice. The packets have to be `\x19`-separated in the input file.
 
 This can be thought of as logical replication for your PG clients.
 
