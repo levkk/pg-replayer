@@ -12,9 +12,9 @@
 #include <arpa/inet.h>
 #include <libpq-fe.h>
 #include <time.h>
+#include "replayer.h"
 
 #define DELIMETER '\x19' /* EM */
-#define DEBUG 0
 
 #include "helpers.h"
 #include "statement.h"

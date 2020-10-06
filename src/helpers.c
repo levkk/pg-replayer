@@ -2,7 +2,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-#define DEBUG 1
+#include "replayer.h"
+
 
 /*
  * Convert between 4 bytes of network data and a 32 bit integer.
@@ -92,7 +93,7 @@ void hexDump (const char * desc, const void * addr, const int len) {
 
 void free_safe(void *ptr, const char *called_from) {
   if (ptr != NULL) {
-    if (DEBUG) {
+    if (DEBUG >= 2) {
       printf("[Debug] Dealocated %p from %s\n", ptr, called_from);
     }
     free(ptr);
