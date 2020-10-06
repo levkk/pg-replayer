@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 /*
  * Convert between 4 bytes of network data and a 32 bit integer.

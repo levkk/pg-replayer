@@ -2,10 +2,12 @@
  * Prepared statement.
  */
 
-#include "statement.h"
-#include "helpers.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
+
+#include "statement.h"
+#include "helpers.h"
 
 #define PARAM_PREALLOC 5
 

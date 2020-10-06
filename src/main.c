@@ -2,6 +2,9 @@
   Postgres queries parser and replayer.
 */
 
+#define _GNU_SOURCE
+
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

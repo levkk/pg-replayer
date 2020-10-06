@@ -1,8 +1,11 @@
 
+#include <stdint.h>
+#include <string.h>
+
 #include "parameter.h"
 #include "helpers.h"
 
-#include <string.h>
+
 
 /*
  * Initialize the parameter.
