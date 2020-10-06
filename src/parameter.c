@@ -34,6 +34,6 @@ void parameter_debug(struct Parameter *param) {
  * Deallocate the structure.
  */
 void parameter_free(struct Parameter *param) {
-	free_safe(param->value);
-	free_safe(param);
+	free_safe(param->value, "parameter_free");
+	free_safe(param, "parameter_free");
 }

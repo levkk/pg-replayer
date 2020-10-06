@@ -25,7 +25,7 @@ fi
 
 echo "Using $PACKET_FILE for test data."
 
-if which valrind; then
+if [[ ! -z "$1" ]]; then
 	valgrind --leak-check=full \
 	         --show-leak-kinds=all \
 	         --track-origins=yes \

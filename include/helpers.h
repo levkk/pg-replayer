@@ -12,7 +12,7 @@ void hexDump(const char * desc, const void * addr, const int len);
 /*
  * Helper to free a pointer and set it to null, safely.
  */
-void free_safe(void *ptr);
+void free_safe(void *ptr, const char*);
 
 /*
  * Convert between 4 bytes of network data and a 32 bit integer.

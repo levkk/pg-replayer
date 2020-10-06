@@ -238,6 +238,10 @@ int main() {
     memset(line, 0, line_len);
   }
 
+  if (stmt != NULL) {
+    printf("No exec found at the end of packet file.\n");
+  }
+
   free(line);
   fclose(f);
 

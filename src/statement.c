@@ -37,9 +37,8 @@ void pstatement_add_param(struct PStatement *stmt, struct Parameter *param) {
 		stmt->params = realloc(stmt->params, new_sp * sizeof(struct Parameter *));
 		stmt->sp = new_sp;
 	}
-	stmt->params[stmt->np] = malloc(sizeof(struct Parameter));
+	stmt->params[stmt->np] = param;
 
-	memcpy(stmt->params[stmt->np], param, sizeof(struct Parameter));
 	stmt->np++;
 }
 
@@ -70,8 +69,9 @@ void pstatement_debug(struct PStatement *stmt) {
 void pstatement_free(struct PStatement *stmt) {
 	int i;
 	for (i = 0; i < stmt->np; i++) {
-		free_safe(stmt->params[i]);
+		parameter_free(stmt->params[i]);
 	}
-	free_safe(stmt->query);
-	free_safe(stmt);
+	free_safe(stmt->params, "pstatement_free");
+	free_safe(stmt->query, "pstatement_free");
+	free_safe(stmt, "pstatement_free");
 }
