@@ -5,7 +5,7 @@
 #
 
 # Change me to fit your local env
-export DATABASE_URL="postgres://postgres:root@localhost:6000/postgres"
+export DATABASE_URL="postgres://postgres:root@localhost:5432/postgres"
 
 # Required for a "smooth" test
 psql $DATABASE_URL -c "CREATE TABLE IF NOT EXISTS users (id BIGSERIAL);"

@@ -2,6 +2,8 @@
  * Prepared statement.
  */
 
+#include <stdint.h>
+
 #include "parameter.h"
 
 struct PStatement {
