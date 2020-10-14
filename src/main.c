@@ -93,13 +93,13 @@ int rotate_logfile(char *new_fn, const char *fn) {
 
   /* Try again if we can't get a lock */
   if (flock(fileno(fd), LOCK_EX) == EWOULDBLOCK) {
-    printf("[Rotation] Could not get lock on %s: %s", lock_fn, strerror(errno));
+    printf("[Rotation] Could not get lock on %s: %s\n", lock_fn, strerror(errno));
     return 1;
   }
 
   /* Rotate */
   if ((res = rename(fn, new_fn))) {
-    printf("[Rotation] Could not rename %s: %s", fn, strerror(errno));
+    printf("[Rotation] Could not rename %s: %s\n", fn, strerror(errno));
     goto unlock;
   }
 
