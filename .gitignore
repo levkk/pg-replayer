@@ -128,4 +128,5 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-player
+player*
+test*

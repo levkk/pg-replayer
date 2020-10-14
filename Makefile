@@ -1,13 +1,18 @@
 INCLUDE=$(shell pg_config --includedir)
 LIB=$(shell pg_config --libdir)
 OPT=-lpq -std=c99
-FILES=src/helpers.c src/parameter.c src/statement.c src/main.c
-OUT=player
-CMD=gcc -I include -I $(INCLUDE) -L $(LIB) -o $(OUT) $(FILES) $(OPT)
+FILES=src/helpers.c src/parameter.c src/statement.c src/postgres.c src/list.c
+CMD=gcc -I include -I $(INCLUDE) -L $(LIB) $(FILES) $(OPT) -Wall
 
 
 debug:
-	$(CMD)
+	$(CMD) -g src/main.c -o player
 
 release:
-	$(CMD) -O2
+	$(CMD) -O2 src/main.c -o player
+
+test:
+	$(CMD) src/test.c -g -o test
+
+install:
+	cp player /usr/bin/replayer

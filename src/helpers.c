@@ -100,3 +100,13 @@ void free_safe(void *ptr, const char *called_from) {
     ptr = NULL;
   }
 }
+
+void gen_random(char *s, const int len) {
+    static const char alphanum[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+    for (int i = 0; i < len; ++i) {
+        s[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
+    }
+
+    s[len] = 0;
+}

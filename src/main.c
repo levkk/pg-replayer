@@ -12,43 +12,32 @@
 #include <arpa/inet.h>
 #include <libpq-fe.h>
 #include <time.h>
+#include <fcntl.h>
+#include <sys/file.h>
+#include <unistd.h>
+#include <errno.h>
+#include <signal.h>
+#include <sys/time.h>
+
 #include "replayer.h"
 
+/*
+ * Separator between packets.
+ */
 #define DELIMETER '\x19' /* EM */
 
 #include "helpers.h"
 #include "statement.h"
 #include "parameter.h"
-
-/*
- * Check the result of our query.
- */
-int check_result(PGresult *res, PGconn *conn, char *query) {
-  int code = PQresultStatus(res);
-
-  switch(code) {
-    case PGRES_TUPLES_OK:
-    case PGRES_COMMAND_OK: {
-      if (DEBUG)
-        printf("[Postgres] Executed: %s\n", query);
-      break;
-    }
-    default: {
-      char *err = PQerrorMessage(conn);
-      printf("[%d] Error: %s\n", code, err);
-      break;
-    }
-  }
-
-  PQclear(res);
-
-  return code;
-}
+#include "postgres.h"
+#include "list.h"
 
 /*
  * Will execute a preparted statement against the connection.
  */
-void pexec(struct PStatement *stmt, PGconn *conn) {
+void pexec(struct PStatement *stmt) {
+  assert(stmt != NULL);
+
   int i;
   const char *params[stmt->np];
 
@@ -57,36 +46,22 @@ void pexec(struct PStatement *stmt, PGconn *conn) {
   }
 
   /* Send the prepared statement over. */
-  PGresult *res = PQexecParams(
-    conn,
-    stmt->query,
-    stmt->np,
-    NULL,
-    params,
-    NULL,
-    NULL,
-    0
-  );
-
-  check_result(res, conn, stmt->query);
-}
-
-/* Cleanly exit the Postgres connection and abort. */
-void do_exit(PGconn *conn) {
-  PQfinish(conn);
-  exit(1);
+  /* The pooler will check result eventually */
+  if (DEBUG) {
+    printf("Executing query for client %u.\n", stmt->client_id);
+  }
+  postgres_pexec(stmt->query, params, stmt->np);
 }
 
 /*
  * Will execute a simple query.
  */
-void exec(char *query, PGconn *conn) {
-  PGresult *res = PQexec(conn, query);
-  check_result(res, conn, query);
+void exec(char *query) {
+  postgres_exec(query);
 }
 
 /*
- * Protect against buffer overruns.
+ * Move the iterator foward while protecting against buffer overruns.
  */
 void move_it(char **it, size_t offset, char *buf, size_t len) {
   *it += offset;
@@ -99,62 +74,106 @@ void move_it(char **it, size_t offset, char *buf, size_t len) {
   assert(*it + offset < buf + len);
 }
 
+
 /*
- * Entrypoint.
+ * Rotate packet logfile so the bouncer can log some more.
  */
-int main() {
+int rotate_logfile(char *new_fn, const char *fn) {
+  int res;
+  size_t len = strlen(fn);
+  char lock_fn[len+6];
+  sprintf(lock_fn, "%s.lock", fn);
+  sprintf(new_fn, "%s.1", fn);
+
+  /* Get exclusive lock & rotate */
+  FILE *fd = fopen(lock_fn, "w");
+  if (flock(fileno(fd), LOCK_EX) == EWOULDBLOCK) {
+    printf("[Rotation] Could not rotate %s: %s", fn, strerror(errno));
+    return 1;
+  }
+  if ((res = rename(fn, new_fn))) {
+    printf("[Rotation] Could not rotate %s: %s", fn, strerror(errno));
+    return 1;
+  }
+
+  /* Touch the logfile to create an empty one */
+  FILE *f = fopen(fn, "w");
+  if (f) {
+    fclose(f);
+  }
+
+  flock(fileno(fd), LOCK_UN);
+  fclose(fd);
+  return res;
+}
+
+struct List *pstatement_find(struct List *pstatements, uint32_t client_id) {
+  struct List *it = pstatements;
+  while (it != NULL) {
+    struct PStatement *pstatement = (struct PStatement*)it->value;
+    assert(pstatement != NULL);
+    if (pstatement->client_id)
+      return it;
+    it = list_next(it);
+  }
+  return NULL;
+}
+
+/*
+ * Main loop:
+ *   - rotate log file
+ *   - read log file and replay packets against mirror DB
+ */
+
+int main_loop() {
   FILE *f;
-  char *line, *it;
+  char *line = NULL, *it, *env_f_name = getenv("PACKET_FILE");
   size_t line_len;
   ssize_t nread;
   int i, q_sent = 0;
-  clock_t start = clock(), end;
+  struct timeval start, end;
 
-  char *fname = getenv("PACKET_FILE");
+  gettimeofday(&start, NULL);
 
-  if (fname == NULL) {
-    f = fopen("/tmp/pktlog", "r");
+  /*
+   * Log file
+   */
+  char fname[512];
+  char new_fn[514];
+
+  if (env_f_name == NULL) {
+    sprintf(fname, "/tmp/pktlog");
   }
+
   else {
-    f = fopen(fname, "r");
+    sprintf(fname, "%s", env_f_name);
   }
+
+  if (rotate_logfile(new_fn, fname)) {
+    exit(1);
+  }
+
+  f = fopen(new_fn, "r");
 
   if (f == NULL) {
-    printf("Could not open packet log.");
-    exit(1);
+    printf("[Main] Could not open packet log.");
+    return 1;
   }
 
-  int libpq_version = PQlibVersion();
-
-  if (DEBUG) {
-    printf("libpq version: %d\n", libpq_version);
-  }
-
-  char *pg_conn = getenv("DATABASE_URL");
-
-  if (pg_conn == NULL) {
-    fprintf(stderr, "DATABASE_URL environment variable is required but not set.\n");
-    exit(1);
-  }
-
-  PGconn *conn = PQconnectdb(pg_conn);
-
-  if (PQstatus(conn) == CONNECTION_BAD) {
-      fprintf(stderr, "Connection to database failed: %s\n",
-        PQerrorMessage(conn));
-      do_exit(conn);
-  }
-
-  struct PStatement *stmt = NULL;
+  struct List *pstatements = list_init();
 
   while ((nread = getdelim(&line, &line_len, DELIMETER, f)) > 0) {
     /* Not enough data to be a valid line. */
+
     if (line_len < 5) {
       continue;
     }
 
     /* Place the iterator at the beginning. */
     it = line;
+
+    uint32_t client_id = parse_uint32(it);
+    move_it(&it, 4, line, line_len);
 
     /* Parse the tag and move forward */
     char tag = *it;
@@ -166,7 +185,7 @@ int main() {
 
     /* Simple query, 'Q' packet */
     if (tag == 'Q') {
-      exec(it, conn);
+      exec(it);
       q_sent += 1;
     }
 
@@ -179,19 +198,28 @@ int main() {
       char *stmt_name = it;
       char *query = it + strlen(stmt_name) + 1; /* +1 for the NULL character. */
 
-      if (stmt != NULL) {
-        printf("Statement is not flushed, packets out of order. \n");
-        pstatement_free(stmt);
-        exit(1);
-      }
-
-      stmt = pstatement_init(query);
+      struct PStatement *stmt = pstatement_init(query, client_id);
+      list_add(pstatements, stmt);
     }
 
     /* Bind parameter(s), 'B' packet */
     else if (tag == 'B') {
+      /* Find the statement this bind belongs to */
+      struct List *node = pstatement_find(pstatements, client_id);
+
+      if (node == NULL) {
+        if (DEBUG)
+          printf("[Main] Out of order Bind packet for client %d. Dropping.\n", client_id);
+        continue;
+      }
+
+      struct PStatement *stmt = (struct PStatement*)node->value;
+
+      /* Parse the packet */
+
       char *portal = it; /* Portal, can be empty */
-      move_it(&it, strlen(portal) + 1, line, line_len); /* Skip it for now */
+      move_it(&it, strlen(portal) + 1, line, line_len);
+      // move_it(&it, strlen(portal) + 1, line, line_len); /* Skip it for now */
 
       char *statement = it; /* Statement name, if any  */
       move_it(&it, strlen(statement) + 1, line, line_len); /* Also not using it for now */
@@ -209,9 +237,7 @@ int main() {
       uint16_t np = parse_uint16(it);
       move_it(&it, 2, line, line_len); /* move iterator forward 2 bytes */
 
-      /* Store the parameters */
-
-      /* Copy over the params */
+      /* Save the params */
       for (i = 0; i < np; i++) {
         int32_t plen = (int32_t)parse_uint32(it); /* Parameter length */
         move_it(&it, 4, line, line_len); /* 4 bytes */
@@ -225,29 +251,77 @@ int main() {
 
     /* Execute the prepared statement, 'E' packet */
     else if (tag == 'E') {
-      pexec(stmt, conn);
+      struct List *node = pstatement_find(pstatements, client_id);
+      if (node == NULL) {
+        if (DEBUG)
+          printf("[Main] Out of order E packet for client %d. Dropping. \n", client_id);
+        continue;
+      }
+
+      struct PStatement *stmt = (struct PStatement*)node->value;
+      pexec(stmt);
       if (DEBUG) {
         pstatement_debug(stmt);
       }
+      list_remove(pstatements, node);
       pstatement_free(stmt);
       stmt = NULL;
       q_sent += 1;
+    }
+
+    else {
+      printf("Unsupported tag: %c\n",  tag);
+      hexDump("line", line, line_len);
     }
 
     /* Clear the line buffer */
     memset(line, 0, line_len);
   }
 
-  if (stmt != NULL) {
-    printf("No exec found at the end of packet file.\n");
-  }
-
   free(line);
   fclose(f);
 
-  end = clock();
+  printf("Orphaned queries: %lu.\n", list_len(pstatements));
+  list_free(pstatements);
 
-  printf("Sent %d queries in %f seconds.\n", q_sent, (double)((end - start)) / CLOCKS_PER_SEC);
+  gettimeofday(&end, NULL);
 
-  do_exit(conn);
+  printf("Sent %d queries in %f seconds.\n", q_sent, (double)((end.tv_sec - start.tv_sec)));
+
+  return 0;
+}
+
+/*
+ * Clean up everything if clean shut down.
+ */
+void cleanup(int signo) {
+  postgres_free();
+
+  printf("Exiting. Bye!\n");
+  exit(0);
+}
+
+/*
+ * Entrypoint.
+ */
+int main() {
+  if (DEBUG) {
+    printf("libpq version: %d\n", PQlibVersion());
+  }
+
+  if (postgres_init()) {
+    printf("Postgres pool failed to initialize.\n");
+    exit(1);
+  }
+
+  if (signal(SIGINT, cleanup) == SIG_ERR) {
+    printf("Can't catch signals, so no clean up will be done on shutdown.\n");
+  }
+
+  while(1) {
+    if (main_loop()) {
+      printf("Error\n");
+    }
+    usleep(SECOND * 0.1); /* Sleep for .1 of a second */
+  }
 }

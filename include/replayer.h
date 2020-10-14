@@ -10,4 +10,6 @@
  */
 #define DEBUG 0
 
+#define SECOND 1000000 /* in microseconds */
+
 #endif
