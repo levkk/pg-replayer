@@ -100,16 +100,8 @@ int rotate_logfile(char *new_fn, const char *fn) {
   /* Rotate */
   if ((res = rename(fn, new_fn))) {
     printf("[Rotation] Could not rename %s: %s\n", fn, strerror(errno));
-    goto unlock;
   }
 
-  /* Touch the logfile to create an empty one */
-  FILE *f = fopen(fn, "w");
-  if (f) {
-    fclose(f);
-  }
-
-unlock:
   flock(fileno(fd), LOCK_UN);
   fclose(fd);
   return res;
