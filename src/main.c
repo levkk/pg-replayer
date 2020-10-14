@@ -80,19 +80,26 @@ void move_it(char **it, size_t offset, char *buf, size_t len) {
  */
 int rotate_logfile(char *new_fn, const char *fn) {
   int res;
-  size_t len = strlen(fn);
-  char lock_fn[len+6];
+  char lock_fn[strlen(fn) + 6];
+
+  /* lock file for concurrent log file access */
   sprintf(lock_fn, "%s.lock", fn);
+
+  /* rotate log file to this */
   sprintf(new_fn, "%s.1", fn);
 
   /* Get exclusive lock & rotate */
   FILE *fd = fopen(lock_fn, "w");
+
+  /* Try again if we can't get a lock */
   if (flock(fileno(fd), LOCK_EX) == EWOULDBLOCK) {
-    printf("[Rotation] Could not rotate %s: %s", fn, strerror(errno));
+    printf("[Rotation] Could not get lock on %s: %s", lock_fn, strerror(errno));
     return 1;
   }
+
+  /* Rotate */
   if ((res = rename(fn, new_fn))) {
-    printf("[Rotation] Could not rotate %s: %s", fn, strerror(errno));
+    printf("[Rotation] Could not rename %s: %s", fn, strerror(errno));
     goto unlock;
   }
 
