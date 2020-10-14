@@ -150,7 +150,7 @@ int main_loop() {
   }
 
   if (rotate_logfile(new_fn, fname)) {
-    exit(1);
+    return 1;
   }
 
   f = fopen(new_fn, "r");
@@ -319,9 +319,7 @@ int main() {
   }
 
   while(1) {
-    if (main_loop()) {
-      printf("Error\n");
-    }
+    main_loop();
     usleep(SECOND * 0.1); /* Sleep for .1 of a second */
   }
 }
