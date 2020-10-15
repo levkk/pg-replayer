@@ -32,6 +32,8 @@
 #include "postgres.h"
 #include "list.h"
 
+static int errc = 0;
+
 /*
  * Will execute a preparted statement against the connection.
  */
@@ -99,7 +101,11 @@ int rotate_logfile(char *new_fn, const char *fn) {
 
   /* Rotate */
   if ((res = rename(fn, new_fn))) {
-    printf("[Rotation] Could not rename %s: %s\n", fn, strerror(errno));
+    errc++;
+    if (errc % 10 == 0 && errc != 0) { /* log errors only once per second */
+      printf("[Rotation] Could not rename %s: %s\n", fn, strerror(errno));
+      errc = 0;
+    }
   }
 
   flock(fileno(fd), LOCK_UN);
@@ -116,7 +122,7 @@ struct List *pstatement_find(struct List *pstatements, uint32_t client_id) {
       return it;
     it = list_next(it);
   }
-  return NULL;
+  return 0;
 }
 
 /*
@@ -127,7 +133,7 @@ struct List *pstatement_find(struct List *pstatements, uint32_t client_id) {
 
 int main_loop() {
   FILE *f;
-  char *line = NULL, *it, *env_f_name = getenv("PACKET_FILE");
+  char *line = NULL, *it, *env_f_name;
   size_t line_len;
   ssize_t nread;
   int i, q_sent = 0;
@@ -141,7 +147,7 @@ int main_loop() {
   char fname[512];
   char new_fn[514];
 
-  if (env_f_name == NULL) {
+  if ((env_f_name = getenv("PACKET_FILE")) == NULL) {
     sprintf(fname, "/tmp/pktlog");
   }
 
@@ -180,7 +186,7 @@ int main_loop() {
     move_it(&it, 1, line, line_len);
 
     /* Parse the len of the packet and move forward. */
-    uint32_t len = parse_uint32(it);
+    /*uint32_t len = parse_uint32(it); TODO: Use this len to parse the packet */
     move_it(&it, 4, line, line_len);
 
     /* Simple query, 'Q' packet */
@@ -219,7 +225,7 @@ int main_loop() {
 
       char *portal = it; /* Portal, can be empty */
       move_it(&it, strlen(portal) + 1, line, line_len);
-      // move_it(&it, strlen(portal) + 1, line, line_len); /* Skip it for now */
+      /* move_it(&it, strlen(portal) + 1, line, line_len); */ /* Skip it for now */
 
       char *statement = it; /* Statement name, if any  */
       move_it(&it, strlen(statement) + 1, line, line_len); /* Also not using it for now */
@@ -229,7 +235,7 @@ int main_loop() {
 
       /* Parse each format */
       for (i = 0; i < nf; i++) {
-        uint16_t fmt = parse_uint16(it);
+        /* uint16_t fmt = parse_uint16(it); */
         move_it(&it, 2, line, line_len);
       }
 
@@ -305,6 +311,8 @@ void cleanup(int signo) {
  * Entrypoint.
  */
 int main() {
+  printf("PGReplayer started. Waiting for packets.\n");
+
   if (DEBUG) {
     printf("libpq version: %d\n", PQlibVersion());
   }

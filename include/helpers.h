@@ -14,7 +14,7 @@
 	} while (0);
 
 
-// https://stackoverflow.com/questions/7775991/how-to-get-hexdump-of-a-structure-data
+/* https://stackoverflow.com/questions/7775991/how-to-get-hexdump-of-a-structure-data */
 void hexDump(const char * desc, const void * addr, const int len);
 
 /*

@@ -70,7 +70,7 @@ int postgres_init() {
 PGconn *postgres_conn_trans(char *stmt) {
   size_t idx = conn_idx++ % POOL_SIZE;
   if (DEBUG)
-    printf("[Postgres] Using %d connection from the pool.\n", idx);
+    printf("[Postgres] Using %lu connection from the pool.\n", idx);
   return conns[idx];
 }
 
@@ -120,7 +120,7 @@ int postgres_pexec(char *stmt, const char **params, size_t nparams) {
     0
   );
 
-  // return check_result(res, conn, stmt);
+  /* return check_result(res, conn, stmt); */
   return 0;
 }
 
@@ -152,25 +152,26 @@ static int ignore_transction_blocks(char *stmt) {
  */
 static int postgres_conn(uint32_t client_id) {
   return POOL_SIZE % client_id;
-//   int i;
+  /*
+  int i;
 
-// loop:
-//   for(i = 0; i < POOL_SIZE; i++) {
-//     PGconn *conn = conns[i];
+loop:
+  for(i = 0; i < POOL_SIZE; i++) {
+    PGconn *conn = conns[i];
 
-//     PQconsumeInput(conn);
-//     if (PQtransactionStatus(conn) != PQTRANS_ACTIVE) {
-//       if (DEBUG)
-//         printf("[Postgres] Connection %d is available.\n", i);
-//       return i;
-//     }
-//   }
+    PQconsumeInput(conn);
+    if (PQtransactionStatus(conn) != PQTRANS_ACTIVE) {
+      if (DEBUG)
+        printf("[Postgres] Connection %d is available.\n", i);
+      return i;
+    }
+  }
 
-//   if (DEBUG)
-//     printf("[Postgres] No connections available. Waiting 5ms.\n");
+  if (DEBUG)
+    printf("[Postgres] No connections available. Waiting 5ms.\n");
 
-//   usleep(SECOND * 0.005); /* A dumb poll, wait 5ms, until next conn becomes free */
-//   goto loop;
+  usleep(SECOND * 0.005);
+  goto loop;  */
 }
 
 /*
