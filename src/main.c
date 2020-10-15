@@ -33,6 +33,7 @@
 #include "list.h"
 
 static int errc = 0;
+int DEBUG = 0;
 
 /*
  * Will execute a preparted statement against the connection.
@@ -312,6 +313,10 @@ void cleanup(int signo) {
  */
 int main() {
   printf("PGReplayer started. Waiting for packets.\n");
+  char *debug = getenv("DEBUG");
+  if (debug != NULL) {
+    DEBUG = atoi(debug);
+  }
 
   if (DEBUG) {
     printf("libpq version: %d\n", PQlibVersion());
