@@ -138,7 +138,7 @@ int main_loop() {
   char *line = NULL, *it, *env_f_name;
   size_t line_len;
   ssize_t nread;
-  int i, q_sent = 0;
+  int i, len, q_sent = 0;
   struct timeval start, end;
 
   gettimeofday(&start, NULL);
@@ -289,7 +289,14 @@ int main_loop() {
   free(line);
   fclose(f);
 
-  printf("Orphaned queries: %lu.\n", list_len(pstatements));
+  if ((len = list_len(pstatements))) {
+    printf("Orphaned queries: %lu.\n", list_len(pstatements));
+    struct List *it = pstatements;
+    while (it->next != NULL) {
+      pstatement_free(it->value);
+      it = it->next;
+    }
+  }
   list_free(pstatements);
 
   gettimeofday(&end, NULL);

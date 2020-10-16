@@ -109,7 +109,7 @@ int postgres_pexec(char *stmt, const char **params, size_t nparams) {
     printf("[Postgres] Executing %s\n", stmt);
   }
 
-  PQsendQueryParams(
+  PQexecParams(
     conn,
     stmt,
     nparams,

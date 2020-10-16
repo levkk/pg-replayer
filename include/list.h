@@ -6,8 +6,6 @@
 struct List {
   struct List *next;
   struct List *prev;
-  struct List *tail;
-  struct List *head;
   void *value;
 };
 
