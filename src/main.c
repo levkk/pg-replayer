@@ -32,7 +32,7 @@
 #include "postgres.h"
 #include "list.h"
 
-static int errc = 0;
+static int erred = 0;
 int DEBUG = 0;
 
 /*
@@ -102,12 +102,13 @@ int rotate_logfile(char *new_fn, const char *fn) {
 
   /* Rotate */
   if ((res = rename(fn, new_fn))) {
-    errc++;
-    if (errc % 10 == 0 && errc != 0) { /* log errors only once per second */
+    if (!erred) { /* log errors only once per occurence */
       printf("[Rotation] Could not rename %s: %s\n", fn, strerror(errno));
-      errc = 0;
+      erred = 1;
     }
   }
+  else
+    erred = 0;
 
   flock(fileno(fd), LOCK_UN);
   fclose(fd);
