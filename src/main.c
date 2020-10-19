@@ -35,6 +35,7 @@
 #include "list.h"
 
 static int erred = 0;
+static int q_sent = 0;
 int DEBUG = 0;
 
 /*
@@ -124,7 +125,7 @@ int main_loop() {
   char *line = NULL, *it, *env_f_name;
   size_t line_len;
   ssize_t nread;
-  int i, len, q_sent = 0;
+  int i, len;
   struct timeval start, end;
   double seconds;
 
@@ -297,7 +298,10 @@ int main_loop() {
   seconds = (end.tv_sec - start.tv_sec) * 1e6;
   seconds = (seconds + end.tv_usec - start.tv_usec) * 1e-6;
 
-  printf("Sent %d queries in %.2f seconds.\n", q_sent, seconds);
+  if (q_sent > 1024) {
+    printf("Sent %d queries in %.2f seconds.\n", q_sent, seconds);
+    q_sent = 0;
+  }
 
   return 0;
 }
