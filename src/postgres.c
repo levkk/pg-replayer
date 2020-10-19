@@ -193,7 +193,7 @@ static int postgres_pexec(struct PStatement *stmt, PGconn *conn) {
     printf("[Postgres][%u] Executing %s\n", stmt->client_id, stmt->query);
   }
 
-  PQexecParams(
+  PQclear(PQexecParams(
     conn,
     stmt->query,
     stmt->np,
@@ -202,7 +202,7 @@ static int postgres_pexec(struct PStatement *stmt, PGconn *conn) {
     NULL,
     NULL,
     0
-  );
+  ));
 
   /* return check_result(res, conn, stmt); */
   return 0;
