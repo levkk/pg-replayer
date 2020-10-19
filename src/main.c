@@ -293,7 +293,8 @@ int main_loop() {
 
   gettimeofday(&end, NULL);
 
-  seconds = (double)((end.tv_sec - start.tv_sec)) + (double)(end.tv_usec - start.tv_usec / (double)SECOND);
+  seconds = (end.tv_sec - start.tv_sec) * 1e6;
+  seconds = (seconds + end.tv_usec - start.tv_usec) * 1e-6;
 
   printf("Sent %d queries in %.2f seconds.\n", q_sent, seconds);
 
