@@ -281,7 +281,8 @@ int main_loop() {
   free(line);
   fclose(f);
 
-  if ((len = list_len(pstatements))) {
+  len = list_len(pstatements);
+  if (len > 0) {
     printf("Orphaned queries: %lu.\n", list_len(pstatements));
     struct List *it = pstatements;
     while (it->next != NULL) {
@@ -289,8 +290,8 @@ int main_loop() {
       it = it->next;
     }
   }
-  list_free(pstatements);
 
+  list_free(pstatements);
   gettimeofday(&end, NULL);
 
   seconds = (end.tv_sec - start.tv_sec) * 1e6;
