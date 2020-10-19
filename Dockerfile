@@ -4,6 +4,8 @@ RUN apt-get update && apt-get install build-essential libpq-dev sudo valgrind -y
 
 COPY . /app
 
+COPY ./tests/pktlog /tmp/pktlog
+
 WORKDIR /app
 
 RUN make

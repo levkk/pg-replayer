@@ -38,20 +38,13 @@ static int erred = 0;
 int DEBUG = 0;
 
 /*
- * Will execute a preparted statement against the connection.
+ * Will execute a preparted statement against a connection in the pool.
  */
 void pexec(struct PStatement *stmt) {
   assert(stmt != NULL);
 
   postgres_assign(stmt);
 }
-
-/*
- * Will execute a simple query.
- */
-// void exec(char *query) {
-//   postgres_exec(query);
-// }
 
 /*
  * Move the iterator foward while protecting against buffer overruns.
@@ -105,6 +98,10 @@ int rotate_logfile(char *new_fn, const char *fn) {
   return res;
 }
 
+/*
+ * Find the prepared statement in our linked list.
+ * TODO: one day generalize this, if needed.
+ */
 struct List *pstatement_find(struct List *pstatements, uint32_t client_id) {
   struct List *it = pstatements;
   while (it != NULL) {
@@ -122,7 +119,6 @@ struct List *pstatement_find(struct List *pstatements, uint32_t client_id) {
  *   - rotate log file
  *   - read log file and replay packets against mirror DB
  */
-
 int main_loop() {
   FILE *f;
   char *line = NULL, *it, *env_f_name;
@@ -130,10 +126,11 @@ int main_loop() {
   ssize_t nread;
   int i, len, q_sent = 0;
   struct timeval start, end;
+  double seconds;
 
   gettimeofday(&start, NULL);
 
-  /* Pause all workers so we can rotate logfile faster */
+  /* Pause all workers so we can maybe rotate logfile faster. */
   postgres_pause();
 
   /*
@@ -271,6 +268,8 @@ int main_loop() {
     }
 
     else {
+      /* BUG: fix corruption in the packet log file */
+      /* This still happens, but logs too much */
       // printf("Unsupported tag: %c\n",  tag);
       // hexDump("line", line, line_len);
     }
@@ -294,7 +293,9 @@ int main_loop() {
 
   gettimeofday(&end, NULL);
 
-  printf("Sent %d queries in %f seconds.\n", q_sent, (double)((end.tv_sec - start.tv_sec)));
+  seconds = (double)((end.tv_sec - start.tv_sec)) + (double)(end.tv_usec - start.tv_usec / (double)SECOND);
+
+  printf("Sent %d queries in %.2f seconds.\n", q_sent, seconds);
 
   return 0;
 }

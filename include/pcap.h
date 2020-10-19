@@ -1,4 +1,4 @@
 /*
- *
+ * NOT USED.
  */
 void capture();

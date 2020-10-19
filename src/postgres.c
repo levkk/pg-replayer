@@ -1,5 +1,9 @@
 /*
  * Postgres pooler.
+ *
+ * BUG: There is a small memory leak hiding in Postgres connection initialization.
+ * Since that happens only once in the application life time, it has not been found yet
+ * by this developer.
  */
 
 #define _GNU_SOURCE
@@ -20,8 +24,6 @@
  * Multiplex connections.
  */
 static PGconn **conns = NULL;
-static uint32_t *conn_clients = NULL;
-// static size_t conn_idx = 0;
 
 static pthread_t threads[POOL_SIZE];
 static int thread_ids[POOL_SIZE];
@@ -29,19 +31,16 @@ static struct PStatement *work_queue[POOL_SIZE];
 static pthread_mutex_t signals[POOL_SIZE];
 static int shutdown = 0;
 
-// static int postgres_conn();
-// static int check_result(PGresult *res, PGconn *conn, char *query);
 static int ignore_transction_blocks(char *stmt);
 
 static void *postgres_worker(void *arg);
 static int postgres_pexec(struct PStatement *stmt, PGconn *conn);
 
 /*
- * Init the pool.
+ * Initialize the pool.
  */
 int postgres_init() {
   assert(conns == NULL);
-  assert(conn_clients == NULL);
 
   int i;
   char *database_url = getenv("DATABASE_URL");
@@ -52,7 +51,6 @@ int postgres_init() {
   }
 
   conns = malloc(POOL_SIZE * sizeof(PGconn *));
-  conn_clients = malloc(POOL_SIZE * sizeof(uint32_t));
 
   for (i = 0; i < POOL_SIZE; i++) {
     PGconn *conn = PQconnectdb(database_url);
@@ -64,7 +62,6 @@ int postgres_init() {
     }
 
     conns[i] = conn;
-    conn_clients[i] = 0;
 
     /* Initialize the threads & signals */
     thread_ids[i] = i;
@@ -74,7 +71,7 @@ int postgres_init() {
       exit(1);
     }
 
-    /* No work yet */
+    /* No work yet, pause the worker. */
     pthread_mutex_lock(&signals[i]);
 
     if (pthread_create(&threads[i], NULL, postgres_worker, &thread_ids[i])) {
@@ -94,37 +91,45 @@ static void *postgres_worker(void *arg) {
   PGconn *conn = conns[id];
 
   while(1) {
+    /* Pause until work is given */
     pthread_mutex_lock(&signals[id]);
+
+    /* Shutdown, skip clean up for now */
     if (shutdown) {
       printf("[%d] Shut down worker\n", id);
       return NULL;
     }
+
     if (DEBUG)
       printf("[%d] Got work\n", id);
 
-    /* Interrupted */
     assert(work_queue[id] != NULL);
 
+    /* Execute query in thread */
     postgres_pexec(work_queue[id], conn);
 
-    /* clean up */
+    /* Clean up */
     pstatement_free(work_queue[id]);
     work_queue[id] = NULL;
-    /* ready for more work */
+
+    /* Ready for more work */
   }
 
   return NULL;
 }
 
 /*
- * Assign work, in a polling way.
+ * Assign work, polling workers for availability.
  */
 void postgres_assign(struct PStatement *stmt) {
   int i;
   while (1) {
     for (i = 0; i < POOL_SIZE; i++) {
+      /* Worker has no work, give it to it */
       if (work_queue[i] == NULL) {
         work_queue[i] = stmt;
+
+        /* Signal the worker to start working */
         pthread_mutex_unlock(&signals[i]);
         return;
       }
@@ -134,7 +139,7 @@ void postgres_assign(struct PStatement *stmt) {
 }
 
 /*
- * Pause all workers.
+ * Pause all workers to help with context switching overhead.
  */
 void postgres_pause(void) {
   int i;
@@ -143,38 +148,8 @@ void postgres_pause(void) {
   }
 }
 
-// /*
-//  * Transactional check.
-//  */
-// PGconn *postgres_conn_trans(char *stmt) {
-//   size_t idx = conn_idx++ % POOL_SIZE;
-//   if (DEBUG)
-//     printf("[Postgres] Using %lu connection from the pool.\n", idx);
-//   return conns[idx];
-// }
-
-// /*
-//  * "Async" PQexec
-//  */
-// int postgres_exec(char *stmt) {
-//    Skip transactional indicators 
-//   if (ignore_transction_blocks(stmt)) {
-//     return 0;
-//   }
-
-//   PGconn *conn = postgres_conn_trans(stmt);
-  
-
-//   if (DEBUG) {
-//     printf("[Postgres] Executing %s\n", stmt);
-//   }
-
-//   PGresult *res = PQexec(conn, stmt);
-//   return check_result(res, conn, stmt);
-// }
-
 /*
- * "Async" prepared statement execution.
+ * Prepared statement execution.
  */
 static int postgres_pexec(struct PStatement *stmt, PGconn *conn) {
   int i;
@@ -184,7 +159,7 @@ static int postgres_pexec(struct PStatement *stmt, PGconn *conn) {
     params[i] = stmt->params[i]->value;
   }
 
-  /* Skip transactional indicators */
+  /* Skip transactional indicators for now, we can't guarantee per-client connections yet. */
   if (ignore_transction_blocks(stmt->query)) {
     return 0;
   }
@@ -204,7 +179,6 @@ static int postgres_pexec(struct PStatement *stmt, PGconn *conn) {
     0
   ));
 
-  /* return check_result(res, conn, stmt); */
   return 0;
 }
 
@@ -232,42 +206,47 @@ static int ignore_transction_blocks(char *stmt) {
 
 /*
  * Check the result of our query.
+ *
+ * Don't need it for now.
  */
-// static int check_result(PGresult *res, PGconn *conn, char *query) {
-//   int code = PQresultStatus(res);
+/*
+static int check_result(PGresult *res, PGconn *conn, char *query) {
+  int code = PQresultStatus(res);
 
-//   switch(code) {
-//     case PGRES_TUPLES_OK:
-//     case PGRES_COMMAND_OK: {
-//       if (DEBUG)
-//         printf("[Postgres] Executed: %s\n", query);
-//       break;
-//     }
-//     default: {
-//       char *err = PQerrorMessage(conn);
-//       printf("[%d] Error: %s\n", code, err);
-//       break;
-//     }
-//   }
+  switch(code) {
+    case PGRES_TUPLES_OK:
+    case PGRES_COMMAND_OK: {
+      if (DEBUG)
+        printf("[Postgres] Executed: %s\n", query);
+      break;
+    }
+    default: {
+      char *err = PQerrorMessage(conn);
+      printf("[%d] Error: %s\n", code, err);
+      break;
+    }
+  }
 
-//   PQclear(res);
+  PQclear(res);
 
-//   return code;
-// }
+  return code;
+}
+*/
 
 /*
- * Shutdown pool
+ * Shutdown pool.
  */
 void postgres_free() {
   int i;
+
+  /* Signal the workers to shut down */
   shutdown = 1;
   for (i = 0; i < POOL_SIZE; i++) {
     pthread_mutex_unlock(&signals[i]);
     pthread_join(threads[i], NULL);
     PQfinish(conns[i]);
   }
+
   free(conns);
-  free(conn_clients);
   conns = NULL;
-  conn_clients = NULL;
 }

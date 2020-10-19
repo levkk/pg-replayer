@@ -320,8 +320,8 @@ _main() {
 if ! _is_sourced; then
 	_main postgres &
 	echo "Giving the Postgres server 5 seconds to start up..."
-	sleep 5
+	sleep infinity
 fi
 
 
-bash tests/run_tests.sh
+# bash tests/run_tests.sh

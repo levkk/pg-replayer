@@ -1,5 +1,7 @@
 /*
  * Capture packets and get the ones we care about.
+ *
+ * NOT USED.
  */
 
 #include <stdio.h> //For standard things
