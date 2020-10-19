@@ -2,7 +2,9 @@
   Postgres queries parser and replayer.
 */
 
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 
 #include <stdint.h>
 #include <stdio.h>
@@ -41,27 +43,15 @@ int DEBUG = 0;
 void pexec(struct PStatement *stmt) {
   assert(stmt != NULL);
 
-  int i;
-  const char *params[stmt->np];
-
-  for (i = 0; i < stmt->np; i++) {
-    params[i] = stmt->params[i]->value;
-  }
-
-  /* Send the prepared statement over. */
-  /* The pooler will check result eventually */
-  if (DEBUG) {
-    printf("Executing query for client %u.\n", stmt->client_id);
-  }
-  postgres_pexec(stmt->query, params, stmt->np);
+  postgres_assign(stmt);
 }
 
 /*
  * Will execute a simple query.
  */
-void exec(char *query) {
-  postgres_exec(query);
-}
+// void exec(char *query) {
+//   postgres_exec(query);
+// }
 
 /*
  * Move the iterator foward while protecting against buffer overruns.
@@ -143,6 +133,9 @@ int main_loop() {
 
   gettimeofday(&start, NULL);
 
+  /* Pause all workers so we can rotate logfile faster */
+  postgres_pause();
+
   /*
    * Log file
    */
@@ -193,7 +186,8 @@ int main_loop() {
 
     /* Simple query, 'Q' packet */
     if (tag == 'Q') {
-      exec(it);
+      struct PStatement *stmt = pstatement_init(it, client_id);
+      postgres_assign(stmt);
       q_sent += 1;
     }
 
@@ -272,14 +266,13 @@ int main_loop() {
         pstatement_debug(stmt);
       }
       list_remove(pstatements, node);
-      pstatement_free(stmt);
       stmt = NULL;
       q_sent += 1;
     }
 
     else {
-      printf("Unsupported tag: %c\n",  tag);
-      hexDump("line", line, line_len);
+      // printf("Unsupported tag: %c\n",  tag);
+      // hexDump("line", line, line_len);
     }
 
     /* Clear the line buffer */
