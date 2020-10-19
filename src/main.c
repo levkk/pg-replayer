@@ -298,7 +298,7 @@ int main_loop() {
   seconds = (end.tv_sec - start.tv_sec) * 1e6;
   seconds = (seconds + end.tv_usec - start.tv_usec) * 1e-6;
 
-  if (q_sent > 1024) {
+  if (q_sent > 2048) {
     printf("Sent %d queries in %.2f seconds.\n", q_sent, seconds);
     q_sent = 0;
   }
