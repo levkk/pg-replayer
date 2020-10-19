@@ -36,6 +36,7 @@
 
 static int erred = 0;
 static int q_sent = 0;
+static double total_seconds = 0;
 int DEBUG = 0;
 
 /*
@@ -297,10 +298,12 @@ int main_loop() {
 
   seconds = (end.tv_sec - start.tv_sec) * 1e6;
   seconds = (seconds + end.tv_usec - start.tv_usec) * 1e-6;
+  total_seconds += seconds;
 
   if (q_sent > 2048) {
-    printf("Sent %d queries in %.2f seconds.\n", q_sent, seconds);
+    printf("Sent %d queries in %.2f seconds.\n", q_sent, total_seconds);
     q_sent = 0;
+    total_seconds = 0;
   }
 
   return 0;
