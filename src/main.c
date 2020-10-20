@@ -2,7 +2,7 @@
   Postgres queries parser and replayer.
 */
 
-#define VERSION 0.12
+#define VERSION 0.13
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
@@ -41,6 +41,14 @@ static int q_sent = 0;
 static double total_seconds = 0;
 int DEBUG = 0;
 
+/* Safe iterator move */
+#define move_it(it, offset, buf, len) do { \
+  if (*it + offset >= buf + len) { \
+    continue; \
+  } \
+  *it += offset; \
+  } while (0);
+
 /*
  * Will execute a preparted statement against a connection in the pool.
  */
@@ -48,20 +56,6 @@ void pexec(struct PStatement *stmt) {
   assert(stmt != NULL);
 
   postgres_assign(stmt);
-}
-
-/*
- * Move the iterator foward while protecting against buffer overruns.
- */
-void move_it(char **it, size_t offset, char *buf, size_t len) {
-  *it += offset;
-
-  if (DEBUG >= 2) {
-    printf("[Debug] Moved %p by %lu. Total: %lu\n", *it, offset, len);
-  }
-
-  /* Make sure we didn't go to far */
-  assert(*it + offset < buf + len);
 }
 
 
