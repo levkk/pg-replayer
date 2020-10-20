@@ -2,7 +2,7 @@
   Postgres queries parser and replayer.
 */
 
-#define VERSION 0.12
+#define VERSION 0.13
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
