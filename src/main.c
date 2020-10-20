@@ -2,6 +2,8 @@
   Postgres queries parser and replayer.
 */
 
+#define VERSION 0.12
+
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
@@ -320,7 +322,7 @@ void cleanup(int signo) {
  * Entrypoint.
  */
 int main() {
-  printf("PGReplayer started. Waiting for packets.\n");
+  printf("PGReplayer %.2f started. Waiting for packets.\n", VERSION);
   char *debug = getenv("DEBUG");
   if (debug != NULL) {
     DEBUG = atoi(debug);
