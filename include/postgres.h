@@ -1,7 +1,6 @@
 /*
  * Postgres pooler.
  */
-int postgres_init();
+int postgres_init(void);
 void postgres_assign(struct PStatement*);
-void postgres_pause(void);
-void postgres_free();
+void postgres_free(void);

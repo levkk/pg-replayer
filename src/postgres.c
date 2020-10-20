@@ -27,9 +27,7 @@ static PGconn **conns = NULL;
 
 static pthread_t threads[POOL_SIZE];
 static int thread_ids[POOL_SIZE];
-static struct PStatement *work_queue[POOL_SIZE];
-static pthread_mutex_t signals[POOL_SIZE];
-static int shutdown = 0;
+static int pipes[2] = { 0 };
 
 static int ignore_transction_blocks(char *stmt);
 
@@ -39,7 +37,7 @@ static int postgres_pexec(struct PStatement *stmt, PGconn *conn);
 /*
  * Initialize the pool.
  */
-int postgres_init() {
+int postgres_init(void) {
   assert(conns == NULL);
 
   int i;
@@ -51,6 +49,10 @@ int postgres_init() {
   }
 
   conns = malloc(POOL_SIZE * sizeof(PGconn *));
+  if (pipe(pipes) == -1) {
+    printf("pipe\n");
+    exit(1);
+  }
 
   for (i = 0; i < POOL_SIZE; i++) {
     PGconn *conn = PQconnectdb(database_url);
@@ -66,18 +68,7 @@ int postgres_init() {
     /* Initialize the threads & signals */
     thread_ids[i] = i;
 
-    if (pthread_mutex_init(&signals[i], NULL)) {
-      printf("pthread_mutex_init\n");
-      exit(1);
-    }
-
-    /* No work yet, pause the worker. */
-    pthread_mutex_lock(&signals[i]);
-
-    if (pthread_create(&threads[i], NULL, postgres_worker, &thread_ids[i])) {
-      printf("pthread_create\n");
-      exit(1);
-    }
+    pthread_create(&threads[i], NULL, postgres_worker, &thread_ids[i]);
   }
 
   return 0;
@@ -88,65 +79,46 @@ int postgres_init() {
  */
 static void *postgres_worker(void *arg) {
   int id = *(int*)arg;
+  size_t nread = 0;
   PGconn *conn = conns[id];
 
-  while(1) {
-    /* Pause until work is given */
-    pthread_mutex_lock(&signals[id]);
+  printf("Worker %d ready\n", id);
 
-    /* Shutdown, skip clean up for now */
-    if (shutdown) {
-      printf("[%d] Shut down worker\n", id);
-      return NULL;
+  while(1) {
+
+    /* Get the work from the main thread */
+    struct PStatement *stmt;
+
+    nread = read(pipes[0], &stmt, sizeof(struct PStatement*));
+
+    if (nread != sizeof(struct PStatement*)) {
+      printf("partial read\n");
+      abort(); /* No partial reads on 8 bytes of data, but if that happens, blow up */
     }
 
     if (DEBUG)
       printf("[%d] Got work\n", id);
 
-    assert(work_queue[id] != NULL);
+    assert(stmt != NULL);
 
     /* Execute query in thread */
-    postgres_pexec(work_queue[id], conn);
+    postgres_pexec(stmt, conn);
 
     /* Clean up */
-    pstatement_free(work_queue[id]);
-    work_queue[id] = NULL;
-
-    /* Ready for more work */
+    pstatement_free(stmt);
   }
 
   return NULL;
 }
 
 /*
- * Assign work, polling workers for availability.
+ * Add work to the queue.
  */
 void postgres_assign(struct PStatement *stmt) {
-  int i;
-  while (1) {
-    for (i = 0; i < POOL_SIZE; i++) {
-      /* Worker has no work, give it to it */
-      if (work_queue[i] == NULL) {
-        work_queue[i] = stmt;
-
-        /* Signal the worker to start working */
-        pthread_mutex_unlock(&signals[i]);
-        return;
-      }
-    }
-    usleep(0.001 * SECOND);
-  }
+  /* Let the kernel handle the scheduling */
+  write(pipes[1], &stmt, sizeof(struct PStatement*));
 }
 
-/*
- * Pause all workers to help with context switching overhead.
- */
-void postgres_pause(void) {
-  int i;
-  for (i = 0; i < POOL_SIZE; i++) {
-    pthread_mutex_trylock(&signals[i]);
-  }
-}
 
 /*
  * Prepared statement execution.
@@ -203,47 +175,17 @@ static int ignore_transction_blocks(char *stmt) {
   return 0;
 }
 
-
-/*
- * Check the result of our query.
- *
- * Don't need it for now.
- */
-/*
-static int check_result(PGresult *res, PGconn *conn, char *query) {
-  int code = PQresultStatus(res);
-
-  switch(code) {
-    case PGRES_TUPLES_OK:
-    case PGRES_COMMAND_OK: {
-      if (DEBUG)
-        printf("[Postgres] Executed: %s\n", query);
-      break;
-    }
-    default: {
-      char *err = PQerrorMessage(conn);
-      printf("[%d] Error: %s\n", code, err);
-      break;
-    }
-  }
-
-  PQclear(res);
-
-  return code;
-}
-*/
-
 /*
  * Shutdown pool.
  */
-void postgres_free() {
+void postgres_free(void) {
   int i;
 
-  /* Signal the workers to shut down */
-  shutdown = 1;
   for (i = 0; i < POOL_SIZE; i++) {
-    pthread_mutex_unlock(&signals[i]);
-    pthread_join(threads[i], NULL);
+    /* Kill */
+    pthread_cancel(threads[i]);
+
+    /* Clean up */
     PQfinish(conns[i]);
   }
 

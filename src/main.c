@@ -132,9 +132,6 @@ int main_loop() {
 
   gettimeofday(&start, NULL);
 
-  /* Pause all workers so we can maybe rotate logfile faster. */
-  postgres_pause();
-
   /*
    * Log file
    */
