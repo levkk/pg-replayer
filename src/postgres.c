@@ -32,7 +32,7 @@ static int pipes[2] = { 0 };
 static int ignore_transction_blocks(char *stmt);
 
 static void *postgres_worker(void *arg);
-static int postgres_pexec(volatile struct PStatement *stmt, PGconn *conn);
+static int postgres_pexec(struct PStatement *stmt, PGconn *conn);
 
 /*
  * Initialize the pool.
@@ -123,7 +123,7 @@ void postgres_assign(struct PStatement *stmt) {
 /*
  * Prepared statement execution.
  */
-static int postgres_pexec(volatile struct PStatement *stmt, PGconn *conn) {
+static int postgres_pexec(struct PStatement *stmt, PGconn *conn) {
   int i;
   const char *params[stmt->np];
 
