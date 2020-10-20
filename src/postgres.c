@@ -27,14 +27,16 @@ static PGconn **conns = NULL;
 
 static pthread_t threads[POOL_SIZE];
 static int thread_ids[POOL_SIZE];
-static struct PStatement *work_queue[POOL_SIZE];
+static volatile struct PStatement *work_queue[POOL_SIZE];
+static int pipes[2] = { 0 };
+static pthread_cond_t conditionals[POOL_SIZE];
 static pthread_mutex_t signals[POOL_SIZE];
 static int shutdown = 0;
 
 static int ignore_transction_blocks(char *stmt);
 
 static void *postgres_worker(void *arg);
-static int postgres_pexec(struct PStatement *stmt, PGconn *conn);
+static int postgres_pexec(volatile struct PStatement *stmt, PGconn *conn);
 
 /*
  * Initialize the pool.
@@ -51,6 +53,10 @@ int postgres_init() {
   }
 
   conns = malloc(POOL_SIZE * sizeof(PGconn *));
+  if (pipe(pipes) == -1) {
+    printf("pipe\n");
+    exit(1);
+  }
 
   for (i = 0; i < POOL_SIZE; i++) {
     PGconn *conn = PQconnectdb(database_url);
@@ -71,8 +77,13 @@ int postgres_init() {
       exit(1);
     }
 
+    if (pthread_cond_init(&conditionals[i], NULL)) {
+      printf("pthread_cond_init\n");
+      exit(1);
+    }
+
     /* No work yet, pause the worker. */
-    pthread_mutex_lock(&signals[i]);
+    // pthread_mutex_lock(&signals[i]);
 
     if (pthread_create(&threads[i], NULL, postgres_worker, &thread_ids[i])) {
       printf("pthread_create\n");
@@ -92,7 +103,11 @@ static void *postgres_worker(void *arg) {
 
   while(1) {
     /* Pause until work is given */
-    pthread_mutex_lock(&signals[id]);
+    // pthread_mutex_lock(&signals[id]);
+
+    struct PStatement *stmt;
+    read(pipes[0], &stmt, sizeof(struct PStatement*));
+    printf("Worker %d read it\n", id);
 
     /* Shutdown, skip clean up for now */
     if (shutdown) {
@@ -103,14 +118,14 @@ static void *postgres_worker(void *arg) {
     if (DEBUG)
       printf("[%d] Got work\n", id);
 
-    assert(work_queue[id] != NULL);
+    assert(stmt != NULL);
 
     /* Execute query in thread */
-    postgres_pexec(work_queue[id], conn);
+    postgres_pexec(stmt, conn);
 
     /* Clean up */
-    pstatement_free(work_queue[id]);
-    work_queue[id] = NULL;
+    pstatement_free(stmt);
+    // work_queue[id] = NULL;
 
     /* Ready for more work */
   }
@@ -122,20 +137,21 @@ static void *postgres_worker(void *arg) {
  * Assign work, polling workers for availability.
  */
 void postgres_assign(struct PStatement *stmt) {
-  int i;
-  while (1) {
-    for (i = 0; i < POOL_SIZE; i++) {
-      /* Worker has no work, give it to it */
-      if (work_queue[i] == NULL) {
-        work_queue[i] = stmt;
+  // int i;
+  write(pipes[1], stmt, sizeof(stmt));
+  // while (1) {
+  //   for (i = 0; i < POOL_SIZE; i++) {
+  //     /* Worker has no work, give it to it */
+  //     if (work_queue[i] == NULL) {
+  //       work_queue[i] = stmt;
 
-        /* Signal the worker to start working */
-        pthread_mutex_unlock(&signals[i]);
-        return;
-      }
-    }
-    usleep(0.001 * SECOND);
-  }
+  //       /* Signal the worker to start working */
+  //       // pthread_mutex_unlock(&signals[i]);
+  //       return;
+  //     }
+  //   }
+  //   usleep(0.001 * SECOND);
+  // }
 }
 
 /*
@@ -151,7 +167,7 @@ void postgres_pause(void) {
 /*
  * Prepared statement execution.
  */
-static int postgres_pexec(struct PStatement *stmt, PGconn *conn) {
+static int postgres_pexec(volatile struct PStatement *stmt, PGconn *conn) {
   int i;
   const char *params[stmt->np];
 
