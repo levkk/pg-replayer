@@ -134,5 +134,5 @@ void log_info(const char *fmt, ...) {
   vsnprintf(buf, sizeof(buf), fmt, ap);
   va_end(ap);
 
-  printf("%s %s\n", timebuf, buf);
+  printf("%s INFO %s\n", timebuf, buf);
 }
