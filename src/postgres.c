@@ -87,9 +87,9 @@ static void *postgres_worker(void *arg) {
 
     /* Wait for work from the main thread */
     struct PStatement *stmt;
-    nread = read(pipes[0], &stmt, sizeof(struct PStatement*));
+    nread = read(pipes[0], &stmt, sizeof(stmt));
 
-    if (nread != sizeof(struct PStatement*)) {
+    if (nread != sizeof(stmt)) {
       log_info("[%d] partial read", id);
       abort(); /* No partial reads on 8 bytes of data, but if that happens, blow up */
     }
@@ -114,7 +114,7 @@ static void *postgres_worker(void *arg) {
  */
 void postgres_assign(struct PStatement *stmt) {
   /* Let the kernel handle the scheduling */
-  write(pipes[1], &stmt, sizeof(struct PStatement*));
+  write(pipes[1], &stmt, sizeof(stmt));
 }
 
 
@@ -189,7 +189,7 @@ void postgres_free(void) {
   int i;
 
   for (i = 0; i < POOL_SIZE; i++) {
-    /* Kill */
+    /* Kill, best effort, we don't really clean up! Main thread will exit immediately. */
     pthread_cancel(threads[i]);
 
     /* Clean up */
