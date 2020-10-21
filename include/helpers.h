@@ -32,11 +32,6 @@ uint32_t parse_uint32(char *data);
  */
 uint16_t parse_uint16(char *data);
 
-/*
- * random string
- */
-void gen_random(char *s, const int len);
-
 /* Log */
 void log_info(const char *fmt, ...);
 

@@ -104,17 +104,6 @@ void free_safe(void *ptr, const char *called_from) {
   }
 }
 
-void gen_random(char *s, const int len) {
-  static const char alphanum[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-  int i;
-
-  for (i = 0; i < len; ++i) {
-    s[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
-  }
-
-  s[len] = 0;
-}
-
 /* Log to stdout */
 void log_info(const char *fmt, ...) {
   char buf[2048]; /* Max log line length = 2048 chars */
