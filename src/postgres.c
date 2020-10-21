@@ -18,6 +18,7 @@
 
 #include "replayer.h"
 #include "statement.h"
+#include "helpers.h"
 
 #define POOL_SIZE 10
 /*
@@ -44,13 +45,13 @@ int postgres_init(void) {
   char *database_url = getenv("DATABASE_URL");
 
   if (!database_url) {
-    printf("No DATABASE_URL is set but is required.\n");
+    log_info("No DATABASE_URL is set but is required.");
     return -1;
   }
 
   conns = malloc(POOL_SIZE * sizeof(PGconn *));
   if (pipe(pipes) == -1) {
-    printf("pipe\n");
+    log_info("pipe\n");
     exit(1);
   }
 
@@ -58,7 +59,7 @@ int postgres_init(void) {
     PGconn *conn = PQconnectdb(database_url);
 
     if (PQstatus(conn) == CONNECTION_BAD) {
-      fprintf(stderr, "Connection to database failed: %s\n", PQerrorMessage(conn));
+      log_info("Connection to database failed: %s", PQerrorMessage(conn));
       PQfinish(conn);
       return -1;
     }
@@ -82,7 +83,7 @@ static void *postgres_worker(void *arg) {
   size_t nread = 0;
   PGconn *conn = conns[id];
 
-  printf("Worker %d ready\n", id);
+  log_info("Worker %d ready", id);
 
   while(1) {
 
@@ -92,12 +93,12 @@ static void *postgres_worker(void *arg) {
     nread = read(pipes[0], &stmt, sizeof(struct PStatement*));
 
     if (nread != sizeof(struct PStatement*)) {
-      printf("partial read\n");
+      log_info("partial read");
       abort(); /* No partial reads on 8 bytes of data, but if that happens, blow up */
     }
 
     if (DEBUG)
-      printf("[%d] Got work\n", id);
+      log_info("[%d] Got work", id);
 
     assert(stmt != NULL);
 
@@ -137,10 +138,10 @@ static int postgres_pexec(struct PStatement *stmt, PGconn *conn) {
   }
 
   if (DEBUG) {
-    printf("[Postgres][%u] Executing %s\n", stmt->client_id, stmt->query);
+    log_info("[Postgres][%u] Executing %s", stmt->client_id, stmt->query);
   }
 
-  PQclear(PQexecParams(
+  PGresult *res = PQexecParams(
     conn,
     stmt->query,
     stmt->np,
@@ -149,7 +150,14 @@ static int postgres_pexec(struct PStatement *stmt, PGconn *conn) {
     NULL,
     NULL,
     0
-  ));
+  );
+
+  if (PQresultStatus(res) != PGRES_TUPLES_OK && PQresultStatus(res) != PGRES_COMMAND_OK) {
+    log_info("[Postgres] Status: %s", PQresStatus(PQresultStatus(res)));
+    log_info("[Postgres] Error: %s", PQerrorMessage(conn));
+  }
+
+  PQclear(res);
 
   return 0;
 }
