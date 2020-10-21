@@ -127,7 +127,7 @@ void log_info(const char *fmt, ...) {
 
   va_list ap;
   va_start(ap, fmt);
-  vsnprintf(buf + date_len, sizeof(buf) - date_len, fmt, ap);
+  vsnprintf(buf + date_len, 2048 - date_len, fmt, ap);
   va_end(ap);
 
   printf("%s\n", buf);

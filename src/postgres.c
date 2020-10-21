@@ -24,8 +24,7 @@
 /*
  * Multiplex connections.
  */
-static PGconn **conns = NULL;
-
+static PGconn *conns[POOL_SIZE] = { NULL };
 static pthread_t threads[POOL_SIZE];
 static int thread_ids[POOL_SIZE];
 static int pipes[2] = { 0 };
@@ -33,14 +32,12 @@ static int pipes[2] = { 0 };
 static int ignore_transction_blocks(char *stmt);
 
 static void *postgres_worker(void *arg);
-static int postgres_pexec(struct PStatement *stmt, PGconn *conn);
+static void postgres_pexec(struct PStatement *stmt, PGconn *conn);
 
 /*
  * Initialize the pool.
  */
 int postgres_init(void) {
-  assert(conns == NULL);
-
   int i;
   char *database_url = getenv("DATABASE_URL");
 
@@ -49,13 +46,14 @@ int postgres_init(void) {
     return -1;
   }
 
-  conns = malloc(POOL_SIZE * sizeof(PGconn *));
   if (pipe(pipes) == -1) {
     log_info("pipe\n");
     exit(1);
   }
 
   for (i = 0; i < POOL_SIZE; i++) {
+    assert(conns[i] == NULL);
+
     PGconn *conn = PQconnectdb(database_url);
 
     if (PQstatus(conn) == CONNECTION_BAD) {
@@ -66,7 +64,7 @@ int postgres_init(void) {
 
     conns[i] = conn;
 
-    /* Initialize the threads & signals */
+    /* Initialize the threads */
     thread_ids[i] = i;
 
     pthread_create(&threads[i], NULL, postgres_worker, &thread_ids[i]);
@@ -87,20 +85,19 @@ static void *postgres_worker(void *arg) {
 
   while(1) {
 
-    /* Get the work from the main thread */
+    /* Wait for work from the main thread */
     struct PStatement *stmt;
-
     nread = read(pipes[0], &stmt, sizeof(struct PStatement*));
 
     if (nread != sizeof(struct PStatement*)) {
-      log_info("partial read");
+      log_info("[%d] partial read", id);
       abort(); /* No partial reads on 8 bytes of data, but if that happens, blow up */
     }
 
-    if (DEBUG)
-      log_info("[%d] Got work", id);
-
-    assert(stmt != NULL);
+    if (stmt == NULL) {
+      log_info("[%d] Null pointer in work queue", id);
+      continue;
+    }
 
     /* Execute query in thread */
     postgres_pexec(stmt, conn);
@@ -124,7 +121,7 @@ void postgres_assign(struct PStatement *stmt) {
 /*
  * Prepared statement execution.
  */
-static int postgres_pexec(struct PStatement *stmt, PGconn *conn) {
+static void postgres_pexec(struct PStatement *stmt, PGconn *conn) {
   int i;
   const char *params[stmt->np];
 
@@ -133,9 +130,8 @@ static int postgres_pexec(struct PStatement *stmt, PGconn *conn) {
   }
 
   /* Skip transactional indicators for now, we can't guarantee per-client connections yet. */
-  if (ignore_transction_blocks(stmt->query)) {
-    return 0;
-  }
+  if (ignore_transction_blocks(stmt->query))
+    return;
 
   if (DEBUG) {
     log_info("[Postgres][%u] Executing %s", stmt->client_id, stmt->query);
@@ -152,14 +148,17 @@ static int postgres_pexec(struct PStatement *stmt, PGconn *conn) {
     0
   );
 
-  if (PQresultStatus(res) != PGRES_TUPLES_OK && PQresultStatus(res) != PGRES_COMMAND_OK) {
-    log_info("[Postgres] Status: %s", PQresStatus(PQresultStatus(res)));
-    log_info("[Postgres] Error: %s", PQerrorMessage(conn));
+  switch (PQresultStatus(res)) {
+    case PGRES_TUPLES_OK:
+    case PGRES_COMMAND_OK:
+      break;
+    default: {
+      log_info("[Postgres] Status: %s", PQresStatus(PQresultStatus(res)));
+      log_info("[Postgres] Error: %s", PQerrorMessage(conn));
+    }
   }
 
   PQclear(res);
-
-  return 0;
 }
 
 static int ignore_transction_blocks(char *stmt) {
@@ -195,8 +194,6 @@ void postgres_free(void) {
 
     /* Clean up */
     PQfinish(conns[i]);
+    conns[i] = NULL;
   }
-
-  free(conns);
-  conns = NULL;
 }
