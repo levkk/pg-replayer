@@ -153,8 +153,7 @@ static void postgres_pexec(struct PStatement *stmt, PGconn *conn) {
     case PGRES_COMMAND_OK:
       break;
     default: {
-      log_info("[Postgres] Status: %s", PQresStatus(PQresultStatus(res)));
-      log_info("[Postgres] Error: %s", PQerrorMessage(conn));
+      log_info("[Postgres] %s | %s | %s", PQresStatus(PQresultStatus(res)), stmt->query, PQerrorMessage(conn));
     }
   }
 

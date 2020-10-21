@@ -193,7 +193,7 @@ int main_loop() {
     /* Simple query, 'Q' packet */
     if (tag == 'Q') {
       struct PStatement *stmt = pstatement_init(it, client_id);
-      postgres_assign(stmt);
+      pexec(stmt);
       q_sent += 1;
     }
 
