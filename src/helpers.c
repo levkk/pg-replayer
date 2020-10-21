@@ -118,17 +118,21 @@ void gen_random(char *s, const int len) {
 /* Log to stdout */
 void log_info(const char *fmt, ...) {
   char buf[2048]; /* Max log line length = 2048 chars */
+  int date_len = strlen("2020-01-01 00:00:00 +hhmm");
+  char timebuf[date_len+1];
   struct tm *local;
-  int date_len = strlen("2020-01-01 00:00:00 +hhmm ");
   time_t now = time(NULL);
   local = localtime(&now);
 
-  strftime(buf, date_len, "%F %T %z ", local);
+  memset(buf, 0, sizeof(buf));
+  memset(timebuf, 0, sizeof(timebuf));
+
+  strftime(timebuf, sizeof(timebuf), "%F %T %z", local);
 
   va_list ap;
   va_start(ap, fmt);
-  vsnprintf(buf + date_len, 2048 - date_len, fmt, ap);
+  vsnprintf(buf, sizeof(buf), fmt, ap);
   va_end(ap);
 
-  printf("%s\n", buf);
+  printf("%s %s\n", timebuf, buf);
 }
