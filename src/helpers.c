@@ -119,11 +119,11 @@ void gen_random(char *s, const int len) {
 void log_info(const char *fmt, ...) {
   char buf[2048]; /* Max log line length = 2048 chars */
   struct tm *local;
-  int date_len = strlen("2020-01-01 00:00:00 +hhmm INFO ");
+  int date_len = strlen("2020-01-01 00:00:00 +hhmm ");
   time_t now = time(NULL);
   local = localtime(&now);
 
-  strftime(buf, date_len, "%F %T %z INFO ", local);
+  strftime(buf, date_len, "%F %T %z ", local);
 
   va_list ap;
   va_start(ap, fmt);
