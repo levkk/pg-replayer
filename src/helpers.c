@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <time.h>
+#include <stdarg.h>
+#include <string.h>
 
 #include "replayer.h"
 
@@ -101,13 +104,24 @@ void free_safe(void *ptr, const char *called_from) {
   }
 }
 
-void gen_random(char *s, const int len) {
-    static const char alphanum[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-    int i;
+/* Log to stdout */
+void log_info(const char *fmt, ...) {
+  char buf[2048]; /* Max log line length = 2048 chars */
+  int date_len = strlen("2020-01-01 00:00:00 +hhmm");
+  char timebuf[date_len+1];
+  struct tm *local;
+  time_t now = time(NULL);
+  local = localtime(&now);
 
-    for (i = 0; i < len; ++i) {
-        s[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
-    }
+  memset(buf, 0, sizeof(buf));
+  memset(timebuf, 0, sizeof(timebuf));
 
-    s[len] = 0;
+  strftime(timebuf, sizeof(timebuf), "%F %T %z", local);
+
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_end(ap);
+
+  printf("%s INFO %s\n", timebuf, buf);
 }

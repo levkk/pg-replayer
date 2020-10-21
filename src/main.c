@@ -36,15 +36,23 @@
 #include "postgres.h"
 #include "list.h"
 
+/* Throttle logging */
 static int erred = 0;
+
+/* Stats */
 static int q_sent = 0;
 static double total_seconds = 0;
+
+/* Show extra info in logs. Used across the code base. */
 int DEBUG = 0;
 
-/* Safe iterator move */
+/* Safe iterator move.
+ *
+ * Usually indicates a corrupt packet in the log file.
+ */
 #define move_it(it, offset, buf, len) do { \
   if (*it + offset >= buf + len) { \
-    continue; \
+    goto next_line; \
   } \
   *it += offset; \
   } while (0);
@@ -57,7 +65,6 @@ void pexec(struct PStatement *stmt) {
 
   postgres_assign(stmt);
 }
-
 
 /*
  * Rotate packet logfile so the bouncer can log some more.
@@ -77,14 +84,14 @@ int rotate_logfile(char *new_fn, const char *fn) {
 
   /* Try again if we can't get a lock */
   if (flock(fileno(fd), LOCK_EX) == EWOULDBLOCK) {
-    printf("[Rotation] Could not get lock on %s: %s\n", lock_fn, strerror(errno));
+    log_info("[Rotation] Could not get lock on %s: %s", lock_fn, strerror(errno));
     return 1;
   }
 
   /* Rotate */
   if ((res = rename(fn, new_fn))) {
     if (!erred) { /* log errors only once per occurence */
-      printf("[Rotation] Could not rename %s: %s\n", fn, strerror(errno));
+      log_info("[Rotation] Could not rename %s: %s", fn, strerror(errno));
       erred = 1;
     }
   }
@@ -98,18 +105,20 @@ int rotate_logfile(char *new_fn, const char *fn) {
 
 /*
  * Find the prepared statement in our linked list.
+ *
  * TODO: one day generalize this, if needed.
  */
 struct List *pstatement_find(struct List *pstatements, uint32_t client_id) {
   struct List *it = pstatements;
   while (it != NULL) {
     struct PStatement *pstatement = (struct PStatement*)it->value;
-    assert(pstatement != NULL);
+    if (pstatement == NULL)
+      return NULL;
     if (pstatement->client_id)
       return it;
     it = list_next(it);
   }
-  return 0;
+  return NULL;
 }
 
 /*
@@ -126,6 +135,7 @@ int main_loop() {
   struct timeval start, end;
   double seconds;
 
+  /* Start the benchmark */
   gettimeofday(&start, NULL);
 
   /*
@@ -135,6 +145,7 @@ int main_loop() {
   char new_fn[514];
 
   if ((env_f_name = getenv("PACKET_FILE")) == NULL) {
+    /* By default it's in /tmp */
     sprintf(fname, "/tmp/pktlog");
   }
 
@@ -142,6 +153,7 @@ int main_loop() {
     sprintf(fname, "%s", env_f_name);
   }
 
+  /* Can't go forward unless we can rotate the file. */
   if (rotate_logfile(new_fn, fname)) {
     return 1;
   }
@@ -149,15 +161,17 @@ int main_loop() {
   f = fopen(new_fn, "r");
 
   if (f == NULL) {
-    printf("[Main] Could not open packet log.");
+    log_info("[Main] Could not open packet log");
     return 1;
   }
 
   struct List *pstatements = list_init();
 
   while ((nread = getdelim(&line, &line_len, DELIMETER, f)) > 0) {
-    /* Not enough data to be a valid line. */
-
+    /* Not enough data to be a valid line.
+     *
+     * 5 bytes would have the tag (char) & packet length (32-bit int)
+     */
     if (line_len < 5) {
       continue;
     }
@@ -166,15 +180,15 @@ int main_loop() {
     it = line;
 
     uint32_t client_id = parse_uint32(it);
-    move_it(&it, 4, line, line_len);
+    move_it(&it, 4, line, nread);
 
     /* Parse the tag and move forward */
     char tag = *it;
-    move_it(&it, 1, line, line_len);
+    move_it(&it, 1, line, nread);
 
     /* Parse the len of the packet and move forward. */
     /*uint32_t len = parse_uint32(it); TODO: Use this len to parse the packet */
-    move_it(&it, 4, line, line_len);
+    move_it(&it, 4, line, nread);
 
     /* Simple query, 'Q' packet */
     if (tag == 'Q') {
@@ -203,43 +217,43 @@ int main_loop() {
 
       if (node == NULL) {
         if (DEBUG)
-          printf("[Main] Out of order Bind packet for client %d. Dropping.\n", client_id);
+          log_info("[Main] Dropping out of order Bind packet for client %d", client_id);
         continue;
       }
 
-      struct PStatement *stmt = (struct PStatement*)node->value;
+      struct PStatement *stmt = (struct PStatement*) node->value;
 
       /* Parse the packet */
 
       char *portal = it; /* Portal, can be empty */
-      move_it(&it, strlen(portal) + 1, line, line_len);
+      move_it(&it, strlen(portal) + 1, line, nread);
       /* move_it(&it, strlen(portal) + 1, line, line_len); */ /* Skip it for now */
 
       char *statement = it; /* Statement name, if any  */
-      move_it(&it, strlen(statement) + 1, line, line_len); /* Also not using it for now */
+      move_it(&it, strlen(statement) + 1, line, nread); /* Also not using it for now */
 
       uint16_t nf = parse_uint16(it); /* number of formats used */
-      move_it(&it, 2, line, line_len); /* Parsed it, now move forward */
+      move_it(&it, 2, line, nread); /* Parsed it, now move forward */
 
       /* Parse each format */
       for (i = 0; i < nf; i++) {
         /* uint16_t fmt = parse_uint16(it); */
-        move_it(&it, 2, line, line_len);
+        move_it(&it, 2, line, nread);
       }
 
       /* Number of parameters */
       uint16_t np = parse_uint16(it);
-      move_it(&it, 2, line, line_len); /* move iterator forward 2 bytes */
+      move_it(&it, 2, line, nread); /* move iterator forward 2 bytes */
 
       /* Save the params */
       for (i = 0; i < np; i++) {
         int32_t plen = (int32_t)parse_uint32(it); /* Parameter length */
-        move_it(&it, 4, line, line_len); /* 4 bytes */
+        move_it(&it, 4, line, nread); /* 4 bytes */
 
         struct Parameter *parameter = parameter_init(plen, it);
-        move_it(&it, plen, line, line_len);
 
         pstatement_add_param(stmt, parameter);
+        move_it(&it, plen, line, nread);
       }
     }
 
@@ -248,15 +262,17 @@ int main_loop() {
       struct List *node = pstatement_find(pstatements, client_id);
       if (node == NULL) {
         if (DEBUG)
-          printf("[Main] Out of order E packet for client %d. Dropping. \n", client_id);
+          log_info("[Main] Dropping out of order E packet for client %d", client_id);
         continue;
       }
 
       struct PStatement *stmt = (struct PStatement*)node->value;
       pexec(stmt);
-      if (DEBUG) {
+
+      if (DEBUG)
         pstatement_debug(stmt);
-      }
+
+      /* The worker will deallocate this object */
       list_remove(pstatements, node);
       stmt = NULL;
       q_sent += 1;
@@ -265,36 +281,55 @@ int main_loop() {
     else {
       /* BUG: fix corruption in the packet log file */
       /* This still happens, but logs too much */
-      // printf("Unsupported tag: %c\n",  tag);
-      // hexDump("line", line, line_len);
+
+      /* printf("Unsupported tag: %c\n",  tag); */
+      /* hexDump("line", line, line_len); */
     }
 
     /* Clear the line buffer */
+  next_line:
     memset(line, 0, line_len);
   }
 
+  /* Let getdelim re-allocate memory */
   free(line);
-  fclose(f);
+  line = NULL;
 
+  /* Close the packet log file we just read and remove it */
+  fclose(f);
+  unlink(new_fn);
+
+  /* Clean up any orphaned statements.
+   *
+   * They can become orphaned because packets are out-of-order in the packet log file
+   * or have not been logged at all.
+   */
   len = list_len(pstatements);
   if (len > 0) {
-    printf("Orphaned queries: %lu.\n", list_len(pstatements));
+    log_info("Orphaned queries: %lu", len);
+
     struct List *it = pstatements;
+
     while (it->next != NULL) {
       pstatement_free(it->value);
       it = it->next;
     }
   }
 
+  /* Clean up the list */
   list_free(pstatements);
+
+  /* Benchmark how we did */
   gettimeofday(&end, NULL);
 
   seconds = (end.tv_sec - start.tv_sec) * 1e6;
   seconds = (seconds + end.tv_usec - start.tv_usec) * 1e-6;
   total_seconds += seconds;
 
+  /* Only log when enough queries went through, otherwise we would log too much */
   if (q_sent > 2048) {
-    printf("Sent %d queries in %.2f seconds.\n", q_sent, total_seconds);
+    log_info("Sent %d queries in %.2f seconds", q_sent, total_seconds);
+
     q_sent = 0;
     total_seconds = 0;
   }
@@ -308,7 +343,7 @@ int main_loop() {
 void cleanup(int signo) {
   postgres_free();
 
-  printf("Exiting. Bye!\n");
+  log_info("Exiting. Bye!");
   exit(0);
 }
 
@@ -316,23 +351,23 @@ void cleanup(int signo) {
  * Entrypoint.
  */
 int main() {
-  printf("PGReplayer %.2f started. Waiting for packets.\n", VERSION);
+  log_info("PGReplayer %.2f started. Waiting for packets", VERSION);
   char *debug = getenv("DEBUG");
   if (debug != NULL) {
     DEBUG = atoi(debug);
   }
 
   if (DEBUG) {
-    printf("libpq version: %d\n", PQlibVersion());
+    log_info("libpq version: %d", PQlibVersion());
   }
 
   if (postgres_init()) {
-    printf("Postgres pool failed to initialize.\n");
+    log_info("Postgres pool failed to initialize");
     exit(1);
   }
 
   if (signal(SIGINT, cleanup) == SIG_ERR) {
-    printf("Can't catch signals, so no clean up will be done on shutdown.\n");
+    log_info("Can't catch signals, so no clean up will be done on shutdown");
   }
 
   while(1) {
