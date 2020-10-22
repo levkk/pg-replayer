@@ -178,6 +178,11 @@ static int ignore_transction_blocks(char *stmt) {
     return 1;
   }
 
+  /* No copy, since we don't record the 'd' packets. */
+  if (strstr(stmt, "COPY") == stmt) {
+    return 1;
+  }
+
   return 0;
 }
 
