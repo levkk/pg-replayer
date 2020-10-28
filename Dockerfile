@@ -8,6 +8,7 @@ WORKDIR /tmp
 
 RUN git clone https://github.com/instacart/pgbouncer && \
     cd pgbouncer && \
+    git checkout levkk-v-1-14 && \
     git submodule init && \
     git submodule update && \
     ./autogen.sh && \
