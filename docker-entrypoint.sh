@@ -318,10 +318,36 @@ _main() {
 }
 
 if ! _is_sourced; then
+	# PgBouncer with packet logging patch
+	pgbouncer /tests/pgbouncer.ini -u postgres &
+
+	# Postgres
 	_main postgres &
 	echo "Giving the Postgres server 5 seconds to start up..."
-	sleep infinity
+	sleep 5
+
+	# Create mirror DB
+	psql postgres://postgres:root@localhost:6432/postgres -c "CREATE DATABASE mirror"
+
+	# Replayer
+	DEBUG=1 valgrind --leak-check=full \
+	         --show-leak-kinds=all \
+	         --track-origins=yes \
+	         --verbose \
+	         ./player &
+
+	# Run the test
+	pgbench -i postgres://postgres:root@localhost:5432/postgres
+	pgbench -i postgres://postgres:root@localhost:5432/mirror
+	pgbench postgres://postgres:root@localhost:6432/postgres -T 10 --protocol=simple
+	pgbench postgres://postgres:root@localhost:6432/postgres -T 10 --protocol=extended
+
+	# Give stdout time to catch up
+	sleep 5
+
+	# Get the memory leak check results
+	ps aux | grep player | grep -v grep | awk '{ print $2 }' | xargs kill -INT
+
+	# Bye!
+	sleep 2
 fi
-
-
-# bash tests/run_tests.sh

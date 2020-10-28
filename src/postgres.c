@@ -143,6 +143,9 @@ static void postgres_pexec(struct PStatement *stmt, PGconn *conn) {
       /* Abort any in-progress transactions, a BEGIN statement sneaked through.
         TODO: Absolutely remove this once we support transactions!
       */
+      if (DEBUG)
+        log_info("[Postgres] Rolling back transaction in progress");
+
       PQclear(PQexec(conn, "ROLLBACK"));
       break;
     }
