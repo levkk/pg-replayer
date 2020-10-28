@@ -137,6 +137,17 @@ static void postgres_pexec(struct PStatement *stmt, PGconn *conn) {
     log_info("[Postgres][%u] Executing %s", stmt->client_id, stmt->query);
   }
 
+  /* Check connection status */
+  switch(PQtransactionStatus(conn)) {
+    case PQTRANS_INTRANS: {
+      /* Abort any in-process transactions, a BEGIN statement sneaked through */
+      PQclear(PQexec(conn, "ROLLBACK"));
+      break;
+    }
+    default:
+      break;
+  }
+
   PGresult *res = PQexecParams(
     conn,
     stmt->query,
