@@ -140,7 +140,7 @@ static void postgres_pexec(struct PStatement *stmt, PGconn *conn) {
   /* Check connection status */
   switch(PQtransactionStatus(conn)) {
     case PQTRANS_INTRANS: {
-      /* Abort any in-process transactions, a BEGIN statement sneaked through */
+      /* Abort any in-progress transactions, a BEGIN statement sneaked through */
       PQclear(PQexec(conn, "ROLLBACK"));
       break;
     }
