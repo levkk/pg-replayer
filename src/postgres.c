@@ -139,7 +139,8 @@ static void postgres_pexec(struct PStatement *stmt, PGconn *conn) {
 
   /* Check connection status */
   switch(PQtransactionStatus(conn)) {
-    case PQTRANS_INTRANS: {
+    case PQTRANS_INTRANS:
+    case PQTRANS_INERROR: {
       /* Abort any in-progress transactions, a BEGIN statement sneaked through.
         TODO: Absolutely remove this once we support transactions!
       */
