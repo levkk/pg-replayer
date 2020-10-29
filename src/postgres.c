@@ -20,7 +20,7 @@
 #include "statement.h"
 #include "helpers.h"
 
-#define POOL_SIZE 10
+#define POOL_SIZE 20
 /*
  * Multiplex connections.
  */
@@ -50,6 +50,8 @@ int postgres_init(void) {
     log_info("pipe\n");
     exit(1);
   }
+
+  log_info("Creating a pool of %d connections", POOL_SIZE);
 
   for (i = 0; i < POOL_SIZE; i++) {
     assert(conns[i] == NULL);
