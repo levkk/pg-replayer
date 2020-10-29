@@ -1,0 +1,3 @@
+player.*
+dep*
+.pytest_cache

@@ -20,7 +20,7 @@
 #include "statement.h"
 #include "helpers.h"
 
-#define POOL_SIZE 10
+#define POOL_SIZE 20
 /*
  * Multiplex connections.
  */
@@ -50,6 +50,8 @@ int postgres_init(void) {
     log_info("pipe\n");
     exit(1);
   }
+
+  log_info("Creating a pool of %d connections", POOL_SIZE);
 
   for (i = 0; i < POOL_SIZE; i++) {
     assert(conns[i] == NULL);
@@ -135,6 +137,23 @@ static void postgres_pexec(struct PStatement *stmt, PGconn *conn) {
 
   if (DEBUG) {
     log_info("[Postgres][%u] Executing %s", stmt->client_id, stmt->query);
+  }
+
+  /* Check connection status */
+  switch(PQtransactionStatus(conn)) {
+    case PQTRANS_INTRANS:
+    case PQTRANS_INERROR: {
+      /* Abort any in-progress transactions, a BEGIN statement sneaked through.
+        TODO: Absolutely remove this once we support transactions!
+      */
+      if (DEBUG)
+        log_info("[Postgres] Rolling back transaction in progress");
+
+      PQclear(PQexec(conn, "ROLLBACK"));
+      break;
+    }
+    default:
+      break;
   }
 
   PGresult *res = PQexecParams(
