@@ -235,7 +235,7 @@ int main_loop() {
         q_dropped++;
         if (DEBUG)
           log_info("[Main] Dropping out of order Bind packet for client %d", client_id);
-        continue;
+        goto next_line;
       }
 
       /* Parse the packet */
@@ -281,7 +281,7 @@ int main_loop() {
         q_dropped++;
         if (DEBUG)
           log_info("[Main] Dropping out of order E packet for client %d", client_id);
-        continue;
+        goto next_line;
       }
 
       pexec(stmt);
