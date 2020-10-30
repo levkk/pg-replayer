@@ -11,7 +11,6 @@ struct List {
 
 struct List *list_init();
 void list_free(struct List *node);
-struct List *list_tail(struct List *node);
 struct List *list_add(struct List *node, void *value);
 struct List *list_next(struct List *node);
 void *list_remove(struct List *head, struct List *node);

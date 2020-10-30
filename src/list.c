@@ -51,16 +51,6 @@ int list_empty(struct List *head) {
 }
 
 /*
- * Find the tail of the list.
- */
-struct List *list_tail(struct List *node) {
-  struct List *it = node;
-  while (it->next != NULL)
-    it = it->next;
-  return it;
-}
-
-/*
  * Add a value to the list.
  */
 struct List *list_add(struct List *head, void *value) {
