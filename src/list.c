@@ -103,18 +103,23 @@ void *list_remove(struct List *head, struct List *node) {
   assert(head != NULL);
   assert(node != NULL);
   
-  struct List *it = head;
+  struct List *it = head, *prev = head;
 
   while (it != NULL) {
     if (it == node) {
       void *value = node->value;
       node->value = NULL;
 
-      if (node != head)
+      if (node != head) {
+        prev->next = node->next;
         free(node);
+      }
+
       return value;
     }
-    it = list_next(it);
+
+    prev = it;
+    it = it->next;
   }
 
   return NULL;
