@@ -2,6 +2,7 @@
  * A simple linked list.
  */
 #include "list.h"
+#include "helpers.h"
 #include <stdlib.h>
 #include <assert.h>
 
@@ -60,17 +61,6 @@ struct List *list_tail(struct List *node) {
 }
 
 /*
- * Find the head of the list.
- */
-struct List *list_head(struct List *node) {
-  assert(node != NULL);
-  struct List *it = node;
-  while (it->prev != NULL)
-    it = it->prev;
-  return it;
-}
-
-/*
  * Add a value to the list.
  */
 struct List *list_add(struct List *head, void *value) {
@@ -89,9 +79,15 @@ struct List *list_add(struct List *head, void *value) {
   }
 
   struct List *node = malloc(sizeof(struct List));
+
+  if (node == NULL) {
+    log_info("[List] No memory");
+    exit(1);
+  }
+
+  node->next = NULL;
   node->value = value;
   it->next = node;
-  node->prev = it;
 
   return node;
 }
@@ -111,21 +107,6 @@ struct List *list_next(struct List *node) {
 }
 
 /*
- * Find a value in the list.
- */
-struct List *list_find(struct List *node, int (*cmp)(void*)) {
-  struct List *it = list_head(node);
-
-  do {
-    if (!cmp(it->value))
-      return it;
-    it = it->next;
-  } while(it->next != NULL);
-
-  return NULL;
-}
-
-/*
  * Remove the node from the list.
  */
 void *list_remove(struct List *head, struct List *node) {
@@ -136,8 +117,6 @@ void *list_remove(struct List *head, struct List *node) {
 
   while (it != NULL) {
     if (it == node) {
-      it->prev = it->next;
-      it->next = it->prev;
       void *value = node->value;
       node->value = NULL;
 
