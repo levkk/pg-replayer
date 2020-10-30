@@ -330,7 +330,7 @@ if ! _is_sourced; then
 	psql postgres://postgres:root@localhost:6432/postgres -c "CREATE DATABASE mirror"
 
 	# Replayer
-	DEBUG=1 valgrind --leak-check=full \
+	valgrind --leak-check=full \
 	         --show-leak-kinds=all \
 	         --track-origins=yes \
 	         --verbose \
@@ -339,15 +339,14 @@ if ! _is_sourced; then
 	# Run the test
 	pgbench -i postgres://postgres:root@localhost:5432/postgres
 	pgbench -i postgres://postgres:root@localhost:5432/mirror
-	pgbench postgres://postgres:root@localhost:6432/postgres -T 10 --protocol=simple
-	pgbench postgres://postgres:root@localhost:6432/postgres -T 10 --protocol=extended
+	pgbench postgres://postgres:root@localhost:6432/postgres -c 16 -T 1 --protocol=simple
+	pgbench postgres://postgres:root@localhost:6432/postgres -c 16 -T 10 --protocol=extended
 
 	# Give stdout time to catch up
-	sleep 5
+	sleep 10
 
 	# Get the memory leak check results
 	ps aux | grep player | grep -v grep | awk '{ print $2 }' | xargs kill -INT
 
-	# Bye!
-	sleep 2
+	sleep 10
 fi

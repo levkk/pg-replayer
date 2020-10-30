@@ -51,11 +51,11 @@ void pstatement_debug(struct PStatement *stmt) {
 
 	int i;
 
-	for (i = 0; i < strlen(stmt->query); i++) {
-		if (stmt->query[i] == '\n') {
-			stmt->query[i] = ' ';
-		}
-	}
+	// for (i = 0; i < strlen(stmt->query); i++) {
+	// 	if (stmt->query[i] == '\n') {
+	// 		stmt->query[i] = ' ';
+	// 	}
+	// }
 
 	printf("[Debug]: PStatement(query=[%s])\n", stmt->query);
 

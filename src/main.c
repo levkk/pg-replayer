@@ -29,22 +29,23 @@
  * Separator between packets.
  */
 #define DELIMETER '\x19' /* EM */
+#define LIST_SIZE 4096
 
 #include "helpers.h"
 #include "statement.h"
 #include "parameter.h"
 #include "postgres.h"
-#include "list.h"
 
 /* Throttle logging */
 static int erred = 0;
 
 /* Stats */
-static int q_sent = 0;
+static int q_sent = 0, q_dropped = 0;
 static double total_seconds = 0;
 
 /* Show extra info in logs. Used across the code base. */
 int DEBUG = 0;
+static struct PStatement *list[4098] = { NULL };
 
 /* Safe iterator move.
  *
@@ -105,20 +106,32 @@ int rotate_logfile(char *new_fn, const char *fn) {
 
 /*
  * Find the prepared statement in our linked list.
- *
- * TODO: one day generalize this, if needed.
  */
-struct List *pstatement_find(struct List *pstatements, uint32_t client_id) {
-  struct List *it = pstatements;
-  while (it != NULL) {
-    struct PStatement *pstatement = (struct PStatement*)it->value;
-    if (pstatement == NULL)
-      return NULL;
-    if (pstatement->client_id)
-      return it;
-    it = list_next(it);
+struct PStatement *pstatement_find(uint32_t client_id) {
+  int i;
+  for (i = 0; i < LIST_SIZE; i++) {
+    if (list[i] != NULL && list[i]->client_id == client_id) {
+      struct PStatement *stmt = list[i];
+      list[i] = NULL;
+      return stmt;
+    }
   }
   return NULL;
+}
+
+/*
+ * Add the prepared statement into our linked list.
+ */
+int pstatement_add(struct PStatement *stmt) {
+  int i;
+  for (i = 0; i < LIST_SIZE; i++) {
+    if (list[i] == NULL) {
+      list[i] = stmt;
+      return 0;
+    }
+  }
+
+  return 1; /* list full */
 }
 
 /*
@@ -165,8 +178,6 @@ int main_loop() {
     return 1;
   }
 
-  struct List *pstatements = list_init();
-
   while ((nread = getdelim(&line, &line_len, DELIMETER, f)) > 0) {
     /* Not enough data to be a valid line.
      *
@@ -207,21 +218,25 @@ int main_loop() {
       char *query = it + strlen(stmt_name) + 1; /* +1 for the NULL character. */
 
       struct PStatement *stmt = pstatement_init(query, client_id);
-      list_add(pstatements, stmt);
+      if (pstatement_add(stmt)) {
+        q_dropped++;
+        if (DEBUG)
+          log_info("[Main] List full, dropping statement");
+        pstatement_free(stmt);
+      }
     }
 
     /* Bind parameter(s), 'B' packet */
     else if (tag == 'B') {
       /* Find the statement this bind belongs to */
-      struct List *node = pstatement_find(pstatements, client_id);
+      struct PStatement *stmt = pstatement_find(client_id);
 
-      if (node == NULL) {
+      if (stmt == NULL) {
+        q_dropped++;
         if (DEBUG)
           log_info("[Main] Dropping out of order Bind packet for client %d", client_id);
         continue;
       }
-
-      struct PStatement *stmt = (struct PStatement*) node->value;
 
       /* Parse the packet */
 
@@ -255,25 +270,26 @@ int main_loop() {
         pstatement_add_param(stmt, parameter);
         move_it(&it, plen, line, nread);
       }
+
+      pstatement_add(stmt); /* Add back to list */
     }
 
     /* Execute the prepared statement, 'E' packet */
     else if (tag == 'E') {
-      struct List *node = pstatement_find(pstatements, client_id);
-      if (node == NULL) {
+      struct PStatement *stmt = pstatement_find(client_id);
+      if (stmt == NULL) {
+        q_dropped++;
         if (DEBUG)
           log_info("[Main] Dropping out of order E packet for client %d", client_id);
         continue;
       }
 
-      struct PStatement *stmt = (struct PStatement*)node->value;
       pexec(stmt);
 
       if (DEBUG)
         pstatement_debug(stmt);
 
       /* The worker will deallocate this object */
-      list_remove(pstatements, node);
       stmt = NULL;
       q_sent += 1;
     }
@@ -304,20 +320,17 @@ int main_loop() {
    * They can become orphaned because packets are out-of-order in the packet log file
    * or have not been logged at all.
    */
-  len = list_len(pstatements);
-  if (len > 0) {
-    log_info("Orphaned queries: %lu", len);
-
-    struct List *it = pstatements;
-
-    while (it->next != NULL) {
-      pstatement_free(it->value);
-      it = it->next;
+  len = 0;
+  for (i = 0; i < LIST_SIZE; i++) {
+    if (list[i] != NULL) {
+      pstatement_free(list[i]);
+      list[i] = NULL;
+      len++;
     }
   }
 
-  /* Clean up the list */
-  list_free(pstatements);
+  if (len > 0)
+    log_info("Orphaned queries: %lu", len);
 
   /* Benchmark how we did */
   gettimeofday(&end, NULL);
@@ -328,9 +341,10 @@ int main_loop() {
 
   /* Only log when enough queries went through, otherwise we would log too much */
   if (q_sent > 2048) {
-    log_info("Sent %d queries in %.2f seconds", q_sent, total_seconds);
-
+    log_info("[Main][Statistics] Sent %d queries and dropped %d packets in %.2f seconds", q_sent, q_dropped, total_seconds);
+    postgres_stats();
     q_sent = 0;
+    q_dropped = 0;
     total_seconds = 0;
   }
 
