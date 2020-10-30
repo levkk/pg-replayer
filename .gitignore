@@ -129,4 +129,6 @@ dmypy.json
 .pyre/
 
 player*
-
+./test
+.lock
+test.*

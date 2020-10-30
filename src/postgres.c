@@ -28,6 +28,7 @@ static PGconn *conns[POOL_SIZE] = { NULL };
 static pthread_t threads[POOL_SIZE];
 static int thread_ids[POOL_SIZE];
 static int pipes[2] = { 0 };
+static uint64_t ok = 0, not_ok = 0, ignored = 0;
 
 static int ignore_transction_blocks(char *stmt);
 
@@ -132,8 +133,10 @@ static void postgres_pexec(struct PStatement *stmt, PGconn *conn) {
   }
 
   /* Skip transactional indicators for now, we can't guarantee per-client connections yet. */
-  if (ignore_transction_blocks(stmt->query))
+  if (ignore_transction_blocks(stmt->query)) {
+    __atomic_add_fetch(&ignored, 1, __ATOMIC_SEQ_CST);
     return;
+  }
 
   if (DEBUG) {
     log_info("[Postgres][%u] Executing %s", stmt->client_id, stmt->query);
@@ -169,9 +172,12 @@ static void postgres_pexec(struct PStatement *stmt, PGconn *conn) {
 
   switch (PQresultStatus(res)) {
     case PGRES_TUPLES_OK:
-    case PGRES_COMMAND_OK:
+    case PGRES_COMMAND_OK: {
+      __atomic_add_fetch(&ok, 1, __ATOMIC_SEQ_CST);
       break;
+    }
     default: {
+      __atomic_add_fetch(&not_ok, 1, __ATOMIC_SEQ_CST);
       log_info("[Postgres] %s | %s | %s", PQresStatus(PQresultStatus(res)), stmt->query, PQerrorMessage(conn));
     }
   }
@@ -219,4 +225,23 @@ void postgres_free(void) {
     PQfinish(conns[i]);
     conns[i] = NULL;
   }
+}
+
+/*
+ * Show some stats. They are not exact, since this is multi-threaded.
+ */
+void postgres_stats(void) {
+  uint64_t l_ok = 0, l_not_ok = 0, l_ignored = 0;
+
+  /* Load stats */
+  __atomic_load(&ok, &l_ok, __ATOMIC_SEQ_CST);
+  __atomic_load(&not_ok, &l_not_ok, __ATOMIC_SEQ_CST);
+  __atomic_load(&ignored, &l_ignored, __ATOMIC_SEQ_CST);
+
+  log_info("[Postgres][Statistics] OK: %llu; Error: %llu; Ignored: %llu.", l_ok, l_not_ok, l_ignored);
+
+  /* Reset stats */
+  __atomic_store_n(&ok, 0, __ATOMIC_SEQ_CST);
+  __atomic_store_n(&not_ok, 0, __ATOMIC_SEQ_CST);
+  __atomic_store_n(&ignored, 0, __ATOMIC_SEQ_CST);
 }
