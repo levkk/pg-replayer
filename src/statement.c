@@ -18,7 +18,7 @@ struct PStatement *pstatement_init(char *query, uint32_t client_id) {
 	struct PStatement *stmt = malloc(sizeof(struct PStatement));
 	size_t len = strlen(query);
 	stmt->query = malloc(len + 1);
-	memcpy(stmt->query, query, len + 1);
+	memcpy(stmt->query, query, len);
 	stmt->query[len] = '\0';
 
 	stmt->params = malloc(PARAM_PREALLOC * sizeof(struct Parameter *));

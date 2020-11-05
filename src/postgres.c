@@ -178,7 +178,7 @@ static void postgres_pexec(struct PStatement *stmt, PGconn *conn) {
     }
     default: {
       __atomic_add_fetch(&not_ok, 1, __ATOMIC_SEQ_CST);
-      log_info("[Postgres] %s | %s | %s", PQresStatus(PQresultStatus(res)), stmt->query, PQerrorMessage(conn));
+      log_info("[Postgres][%llu] %s | %s | %s", stmt->client_id, PQresStatus(PQresultStatus(res)), stmt->query, PQerrorMessage(conn));
     }
   }
 
@@ -186,25 +186,29 @@ static void postgres_pexec(struct PStatement *stmt, PGconn *conn) {
 }
 
 static int ignore_transction_blocks(char *stmt) {
-  if (strstr(stmt, "BEGIN") == stmt) {
+  if (strstr(stmt, "BEGIN") != NULL) {
     return 1;
   }
 
+  /* Not sure about this one */
   if (strstr(stmt, "END") == stmt) {
     return 1;
   }
 
-  if (strstr(stmt, "COMMIT") == stmt) {
+  if (strstr(stmt, "COMMIT") != NULL) {
     return 1;
   }
 
   /* Oh well */
-  if (strstr(stmt, "ROLLBACK") == stmt) {
+  if (strstr(stmt, "ROLLBACK") != NULL) {
     return 1;
   }
 
-  /* No copy, since we don't record the 'd' packets. */
-  if (strstr(stmt, "COPY") == stmt) {
+  /* No copy, since we don't record the 'd' packets.
+   * Space is intentional because all copy statements
+   * will be "COPY table_name" or "COPY FROM"
+  */
+  if (strstr(stmt, "COPY ") != NULL) {
     return 1;
   }
 
