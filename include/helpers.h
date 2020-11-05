@@ -5,15 +5,6 @@
 #include <stdio.h>
 #include <stdint.h>
 
-/*
- * Move iterator and check that we didn't go too far
- */
-#define MOVE_IT(a, b, c, d) do { \
-	a += b; \
-	assert(a + b < c + d); \
-	} while (0);
-
-
 /* https://stackoverflow.com/questions/7775991/how-to-get-hexdump-of-a-structure-data */
 void hexDump(const char * desc, const void * addr, const int len);
 

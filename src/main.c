@@ -51,11 +51,11 @@ static struct PStatement *list[4098] = { NULL };
  *
  * Usually indicates a corrupt packet in the log file.
  */
-#define move_it(it, offset, buf, len) do { \
-  if (*it + offset >= buf + len) { \
+#define MOVE_IT(it, offset, buf, len) do { \
+  if (it + offset >= buf + len) { \
     goto next_line; \
   } \
-  *it += offset; \
+  it += offset; \
   } while (0);
 
 /*
@@ -191,15 +191,15 @@ int main_loop() {
     it = line;
 
     uint32_t client_id = parse_uint32(it);
-    move_it(&it, 4, line, nread);
+    MOVE_IT(it, 4, line, nread);
 
     /* Parse the tag and move forward */
     char tag = *it;
-    move_it(&it, 1, line, nread);
+    MOVE_IT(it, 1, line, nread);
 
     /* Parse the len of the packet and move forward. */
     /*uint32_t len = parse_uint32(it); TODO: Use this len to parse the packet */
-    move_it(&it, 4, line, nread);
+    MOVE_IT(it, 4, line, nread);
 
     /* Simple query, 'Q' packet */
     if (tag == 'Q') {
@@ -241,34 +241,34 @@ int main_loop() {
       /* Parse the packet */
 
       char *portal = it; /* Portal, can be empty */
-      move_it(&it, strlen(portal) + 1, line, nread);
-      /* move_it(&it, strlen(portal) + 1, line, line_len); */ /* Skip it for now */
+      MOVE_IT(it, strlen(portal) + 1, line, nread);
+      /* MOVE_IT(it, strlen(portal) + 1, line, line_len); */ /* Skip it for now */
 
       char *statement = it; /* Statement name, if any  */
-      move_it(&it, strlen(statement) + 1, line, nread); /* Also not using it for now */
+      MOVE_IT(it, strlen(statement) + 1, line, nread); /* Also not using it for now */
 
       uint16_t nf = parse_uint16(it); /* number of formats used */
-      move_it(&it, 2, line, nread); /* Parsed it, now move forward */
+      MOVE_IT(it, 2, line, nread); /* Parsed it, now move forward */
 
       /* Parse each format */
       for (i = 0; i < nf; i++) {
         /* uint16_t fmt = parse_uint16(it); */
-        move_it(&it, 2, line, nread);
+        MOVE_IT(it, 2, line, nread);
       }
 
       /* Number of parameters */
       uint16_t np = parse_uint16(it);
-      move_it(&it, 2, line, nread); /* move iterator forward 2 bytes */
+      MOVE_IT(it, 2, line, nread); /* move iterator forward 2 bytes */
 
       /* Save the params */
       for (i = 0; i < np; i++) {
         int32_t plen = (int32_t)parse_uint32(it); /* Parameter length */
-        move_it(&it, 4, line, nread); /* 4 bytes */
+        MOVE_IT(it, 4, line, nread); /* 4 bytes */
 
         struct Parameter *parameter = parameter_init(plen, it);
 
         pstatement_add_param(stmt, parameter);
-        move_it(&it, plen, line, nread);
+        MOVE_IT(it, plen, line, nread);
       }
 
       pstatement_add(stmt); /* Add back to list */
