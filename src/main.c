@@ -52,7 +52,7 @@ static struct PStatement *list[4098] = { NULL };
  * Usually indicates a corrupt packet in the log file.
  */
 #define MOVE_IT(it, offset, buf, len) do { \
-  if (it + offset >= buf + len) { \
+  if (it + offset > buf + len) { \
     goto next_line; \
   } \
   it += offset; \
@@ -187,6 +187,10 @@ int main_loop() {
       continue;
     }
 
+    /* Remove the delimiter */
+    if (line[nread - 1] == DELIMETER)
+      line[nread - 1] = '\0';
+
     /* Place the iterator at the beginning. */
     it = line;
 
@@ -198,7 +202,7 @@ int main_loop() {
     MOVE_IT(it, 1, line, nread);
 
     /* Parse the len of the packet and move forward. */
-    /*uint32_t len = parse_uint32(it); TODO: Use this len to parse the packet */
+    /* uint32_t len = parse_uint32(it); */
     MOVE_IT(it, 4, line, nread);
 
     /* Simple query, 'Q' packet */

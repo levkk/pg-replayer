@@ -327,7 +327,7 @@ if ! _is_sourced; then
 	sleep 5
 
 	# Create mirror DB
-	psql postgres://postgres:root@localhost:6432/postgres -c "CREATE DATABASE mirror"
+	psql postgres://postgres:root@localhost:6432/postgres -c "CREATE DATABASE mirror" || true
 
 	# Replayer
 	valgrind --leak-check=full \
@@ -337,8 +337,8 @@ if ! _is_sourced; then
 	         ./player &
 
 	# Run the test
-	pgbench -i postgres://postgres:root@localhost:5432/postgres
-	pgbench -i postgres://postgres:root@localhost:5432/mirror
+	pgbench -i postgres://postgres:root@localhost:5432/postgres || true
+	pgbench -i postgres://postgres:root@localhost:5432/mirror || true
 	pgbench postgres://postgres:root@localhost:6432/postgres -c 16 -T 1 --protocol=simple
 	pgbench postgres://postgres:root@localhost:6432/postgres -c 16 -T 10 --protocol=extended
 

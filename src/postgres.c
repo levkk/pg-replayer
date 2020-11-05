@@ -178,7 +178,7 @@ static void postgres_pexec(struct PStatement *stmt, PGconn *conn) {
     }
     default: {
       __atomic_add_fetch(&not_ok, 1, __ATOMIC_SEQ_CST);
-      log_info("[Postgres] %s | %s | %s", PQresStatus(PQresultStatus(res)), stmt->query, PQerrorMessage(conn));
+      log_info("[Postgres][%llu] %s | %s | %s", stmt->client_id, PQresStatus(PQresultStatus(res)), stmt->query, PQerrorMessage(conn));
     }
   }
 
