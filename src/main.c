@@ -28,7 +28,7 @@
 /*
  * Separator between packets.
  */
-#define DELIMETER '\x19' /* EM */
+#define DELIMITER '\x19' /* EM */
 #define LIST_SIZE 4096
 
 #include "helpers.h"
@@ -178,7 +178,7 @@ int main_loop() {
     return 1;
   }
 
-  while ((nread = getdelim(&line, &line_len, DELIMETER, f)) > 0) {
+  while ((nread = getdelim(&line, &line_len, DELIMITER, f)) > 0) {
     /* Not enough data to be a valid line.
      *
      * 5 bytes would have the tag (char) & packet length (32-bit int)
@@ -188,7 +188,7 @@ int main_loop() {
     }
 
     /* Remove the delimiter */
-    if (line[nread - 1] == DELIMETER)
+    if (line[nread - 1] == DELIMITER)
       line[nread - 1] = '\0';
 
     /* Place the iterator at the beginning. */
