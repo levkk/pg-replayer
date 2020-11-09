@@ -236,13 +236,16 @@ void postgres_free(void) {
  */
 void postgres_stats(void) {
   uint64_t l_ok = 0, l_not_ok = 0, l_ignored = 0;
+  double success_rate = 0.0;
 
   /* Load stats */
   __atomic_load(&ok, &l_ok, __ATOMIC_SEQ_CST);
   __atomic_load(&not_ok, &l_not_ok, __ATOMIC_SEQ_CST);
   __atomic_load(&ignored, &l_ignored, __ATOMIC_SEQ_CST);
 
-  log_info("[Postgres][Statistics] OK: %llu; Error: %llu; Ignored: %llu.", l_ok, l_not_ok, l_ignored);
+  success_rate = (double)l_ok / ((double)l_ok + (double)l_not_ok);
+
+  log_info("[Postgres][Statistics] Success rate: %.4f; OK: %llu; Error: %llu; Ignored: %llu.", success_rate, l_ok, l_not_ok, l_ignored);
 
   /* Reset stats */
   __atomic_store_n(&ok, 0, __ATOMIC_SEQ_CST);

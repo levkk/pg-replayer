@@ -28,7 +28,7 @@
 /*
  * Separator between packets.
  */
-#define DELIMITER '\x19' /* EM */
+static char DELIMITER = 0x19; /* EM */
 #define LIST_SIZE 4096
 
 #include "helpers.h"
@@ -110,10 +110,12 @@ int rotate_logfile(char *new_fn, const char *fn) {
 struct PStatement *pstatement_find(uint32_t client_id) {
   int i;
   for (i = 0; i < LIST_SIZE; i++) {
-    if (list[i] != NULL && list[i]->client_id == client_id) {
-      struct PStatement *stmt = list[i];
-      list[i] = NULL;
-      return stmt;
+    if (list[i] != NULL) {
+      if (list[i]->client_id == client_id) {
+        struct PStatement *stmt = list[i];
+        list[i] = NULL;
+        return stmt;
+      }
     }
   }
   return NULL;
@@ -142,7 +144,7 @@ int pstatement_add(struct PStatement *stmt) {
 int main_loop() {
   FILE *f;
   char *line = NULL, *it, *env_f_name;
-  size_t line_len;
+  size_t line_len = 0, good_lines = 0, short_lines = 0, corrupted_lines = 0, b_c = 0, p_c = 0, e_c = 0, d_c = 0;
   ssize_t nread;
   int i, len;
   struct timeval start, end;
@@ -183,7 +185,9 @@ int main_loop() {
      *
      * 5 bytes would have the tag (char) & packet length (32-bit int)
      */
-    if (line_len < 5) {
+    if (nread < 5) {
+      short_lines++;
+      // hexDump("line", line, nread); 
       continue;
     }
 
@@ -195,7 +199,7 @@ int main_loop() {
     it = line;
 
     uint32_t client_id = parse_uint32(it);
-    MOVE_IT(it, 4, line, nread);
+    MOVE_IT(it, sizeof(uint32_t), line, nread);
 
     /* Parse the tag and move forward */
     char tag = *it;
@@ -203,13 +207,14 @@ int main_loop() {
 
     /* Parse the len of the packet and move forward. */
     /* uint32_t len = parse_uint32(it); */
-    MOVE_IT(it, 4, line, nread);
+    MOVE_IT(it, sizeof(uint32_t), line, nread);
 
     /* Simple query, 'Q' packet */
     if (tag == 'Q') {
       struct PStatement *stmt = pstatement_init(it, client_id);
       pexec(stmt);
       q_sent += 1;
+      good_lines++;
     }
 
     /* Prepared statement, 'P' packet */
@@ -228,6 +233,7 @@ int main_loop() {
           log_info("[Main] List full, dropping statement");
         pstatement_free(stmt);
       }
+      good_lines++;
     }
 
     /* Bind parameter(s), 'B' packet */
@@ -276,6 +282,7 @@ int main_loop() {
       }
 
       pstatement_add(stmt); /* Add back to list */
+      good_lines++;
     }
 
     /* Execute the prepared statement, 'E' packet */
@@ -295,27 +302,51 @@ int main_loop() {
 
       /* The worker will deallocate this object */
       stmt = NULL;
-      q_sent += 1;
+      q_sent++;
+      good_lines++;
     }
 
     else {
+      switch(line[0]) {
+        case 'P': {
+          p_c++;
+          break;
+        }
+        case 'B': {
+          b_c++;
+          break;
+        }
+        case 'E': {
+          e_c++;
+          break;
+        }
+        default:
+          d_c++;
+          break;
+      }
+      corrupted_lines++;
+      // log_info("[Main][Corrupt] %c", line[4]);
       /* BUG: fix corruption in the packet log file */
       /* This still happens, but logs too much */
 
-      /* printf("Unsupported tag: %c\n",  tag); */
-      /* hexDump("line", line, line_len); */
+       // printf("Unsupported tag: %c\n",  tag); 
+       hexDump("line", line, nread); 
+       log_info("client_id: %lu", (uint32_t*)line);
     }
+  log_info("ok client_id: %lu", (uint32_t)line[0]);
 
     /* Clear the line buffer */
   next_line:
-    memset(line, 0, line_len);
+    memset(line, 0, nread);
   }
 
   /* Let getdelim re-allocate memory */
-  free(line);
-  line = NULL;
+  log_info("[Main][Statistics] Corrupted: %lu; Too short: %lu; Good: %lu.", corrupted_lines, short_lines, good_lines);
+  // log_info("[Main][Debug] P: %lu; B: %lu; E: %lu, D: %lu", p_c, b_c, e_c, d_c);
 
   /* Close the packet log file we just read and remove it */
+  free(line);
+  line = NULL;
   fclose(f);
   unlink(new_fn);
 
