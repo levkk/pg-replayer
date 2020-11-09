@@ -2,7 +2,7 @@
   Postgres queries parser and replayer.
 */
 
-#define VERSION 1.3
+#define VERSION 1.4
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
@@ -27,8 +27,10 @@
 
 /*
  * Separator between packets.
+ * I know this is bad since this is actually a valid SQL UTF-8 character.
+ * TODO: Implement "getdelim" with 16-bit or 32-bit delimiters.
  */
-#define DELIMITER '\x19' /* EM */
+static const char delimiter = '~';
 #define LIST_SIZE 4096
 
 #include "helpers.h"
@@ -40,7 +42,7 @@
 static int erred = 0;
 
 /* Stats */
-static int q_sent = 0, q_dropped = 0;
+static size_t q_sent = 0, q_dropped = 0, lines_read = 0, lines_dropped = 0;
 static double total_seconds = 0;
 
 /* Show extra info in logs. Used across the code base. */
@@ -110,10 +112,12 @@ int rotate_logfile(char *new_fn, const char *fn) {
 struct PStatement *pstatement_find(uint32_t client_id) {
   int i;
   for (i = 0; i < LIST_SIZE; i++) {
-    if (list[i] != NULL && list[i]->client_id == client_id) {
-      struct PStatement *stmt = list[i];
-      list[i] = NULL;
-      return stmt;
+    if (list[i] != NULL) {
+      if (list[i]->client_id == client_id) {
+        struct PStatement *stmt = list[i];
+        list[i] = NULL;
+        return stmt;
+      }
     }
   }
   return NULL;
@@ -142,7 +146,7 @@ int pstatement_add(struct PStatement *stmt) {
 int main_loop() {
   FILE *f;
   char *line = NULL, *it, *env_f_name;
-  size_t line_len;
+  size_t line_len = 0;
   ssize_t nread;
   int i, len;
   struct timeval start, end;
@@ -178,24 +182,25 @@ int main_loop() {
     return 1;
   }
 
-  while ((nread = getdelim(&line, &line_len, DELIMITER, f)) > 0) {
+  while ((nread = getdelim(&line, &line_len, delimiter, f)) > 0) {
     /* Not enough data to be a valid line.
      *
      * 5 bytes would have the tag (char) & packet length (32-bit int)
      */
-    if (line_len < 5) {
+    if (nread < 5) {
+      lines_dropped++;
       continue;
     }
 
     /* Remove the delimiter */
-    if (line[nread - 1] == DELIMITER)
+    if (line[nread - 1] == delimiter)
       line[nread - 1] = '\0';
 
     /* Place the iterator at the beginning. */
     it = line;
 
     uint32_t client_id = parse_uint32(it);
-    MOVE_IT(it, 4, line, nread);
+    MOVE_IT(it, sizeof(uint32_t), line, nread);
 
     /* Parse the tag and move forward */
     char tag = *it;
@@ -203,7 +208,7 @@ int main_loop() {
 
     /* Parse the len of the packet and move forward. */
     /* uint32_t len = parse_uint32(it); */
-    MOVE_IT(it, 4, line, nread);
+    MOVE_IT(it, sizeof(uint32_t), line, nread);
 
     /* Simple query, 'Q' packet */
     if (tag == 'Q') {
@@ -295,20 +300,21 @@ int main_loop() {
 
       /* The worker will deallocate this object */
       stmt = NULL;
-      q_sent += 1;
+      q_sent++;
     }
 
     else {
-      /* BUG: fix corruption in the packet log file */
-      /* This still happens, but logs too much */
-
-      /* printf("Unsupported tag: %c\n",  tag); */
-      /* hexDump("line", line, line_len); */
+      lines_dropped++;
+      /* BUG: fix corruption in the packet log file.
+       * This still might happen, but logs too much.
+       * This is due to a poor choice in delimiter.
+       */
     }
 
     /* Clear the line buffer */
   next_line:
     memset(line, 0, line_len);
+    lines_read++;
   }
 
   /* Let getdelim re-allocate memory */
@@ -345,11 +351,13 @@ int main_loop() {
 
   /* Only log when enough queries went through, otherwise we would log too much */
   if (q_sent > 2048) {
-    log_info("[Main][Statistics] Sent %d queries and dropped %d packets in %.2f seconds", q_sent, q_dropped, total_seconds);
+    log_info("[Main][Statistics] Sent %lu queries; dropped %lu out-of-order packets; read %lu lines; corrupted %lu lines; time %.2f seconds", q_sent, q_dropped, lines_read, lines_dropped, total_seconds);
     postgres_stats();
     q_sent = 0;
     q_dropped = 0;
     total_seconds = 0;
+    lines_read = 0;
+    lines_dropped = 0;
   }
 
   return 0;
