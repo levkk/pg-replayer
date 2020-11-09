@@ -305,10 +305,10 @@ int main_loop() {
 
     else {
       lines_dropped++;
-      // log_info("[Main][Corrupt] %c", line[4]);
-      /* BUG: fix corruption in the packet log file */
-      /* This still happens, but logs too much. This is due to a poor choice in delimiter.
-      printf("Unsupported tag: %c\n",  tag); */
+      /* BUG: fix corruption in the packet log file.
+       * This still might happen, but logs too much.
+       * This is due to a poor choice in delimiter.
+       */
     }
 
     /* Clear the line buffer */
