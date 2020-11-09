@@ -27,8 +27,10 @@
 
 /*
  * Separator between packets.
+ * I know this is bad since this is actually a valid SQL UTF-8 character.
+ * TODO: Implement "getdelim" with 16-bit or 32-bit delimiters.
  */
-static char DELIMITER = 0x19; /* EM */
+static char DELIMITER = '~';
 #define LIST_SIZE 4096
 
 #include "helpers.h"
@@ -40,7 +42,7 @@ static char DELIMITER = 0x19; /* EM */
 static int erred = 0;
 
 /* Stats */
-static int q_sent = 0, q_dropped = 0;
+static size_t q_sent = 0, q_dropped = 0, lines_read = 0, lines_dropped = 0;
 static double total_seconds = 0;
 
 /* Show extra info in logs. Used across the code base. */
@@ -144,7 +146,7 @@ int pstatement_add(struct PStatement *stmt) {
 int main_loop() {
   FILE *f;
   char *line = NULL, *it, *env_f_name;
-  size_t line_len = 0, good_lines = 0, short_lines = 0, corrupted_lines = 0, b_c = 0, p_c = 0, e_c = 0, d_c = 0;
+  size_t line_len = 0;
   ssize_t nread;
   int i, len;
   struct timeval start, end;
@@ -186,8 +188,7 @@ int main_loop() {
      * 5 bytes would have the tag (char) & packet length (32-bit int)
      */
     if (nread < 5) {
-      short_lines++;
-      // hexDump("line", line, nread); 
+      lines_dropped++;
       continue;
     }
 
@@ -214,7 +215,6 @@ int main_loop() {
       struct PStatement *stmt = pstatement_init(it, client_id);
       pexec(stmt);
       q_sent += 1;
-      good_lines++;
     }
 
     /* Prepared statement, 'P' packet */
@@ -233,7 +233,6 @@ int main_loop() {
           log_info("[Main] List full, dropping statement");
         pstatement_free(stmt);
       }
-      good_lines++;
     }
 
     /* Bind parameter(s), 'B' packet */
@@ -282,7 +281,6 @@ int main_loop() {
       }
 
       pstatement_add(stmt); /* Add back to list */
-      good_lines++;
     }
 
     /* Execute the prepared statement, 'E' packet */
@@ -303,50 +301,27 @@ int main_loop() {
       /* The worker will deallocate this object */
       stmt = NULL;
       q_sent++;
-      good_lines++;
     }
 
     else {
-      switch(line[0]) {
-        case 'P': {
-          p_c++;
-          break;
-        }
-        case 'B': {
-          b_c++;
-          break;
-        }
-        case 'E': {
-          e_c++;
-          break;
-        }
-        default:
-          d_c++;
-          break;
-      }
-      corrupted_lines++;
+      lines_dropped++;
       // log_info("[Main][Corrupt] %c", line[4]);
       /* BUG: fix corruption in the packet log file */
-      /* This still happens, but logs too much */
-
-       // printf("Unsupported tag: %c\n",  tag); 
-       hexDump("line", line, nread); 
-       log_info("client_id: %lu", (uint32_t*)line);
+      /* This still happens, but logs too much. This is due to a poor choice in delimiter.
+      printf("Unsupported tag: %c\n",  tag); */
     }
-  log_info("ok client_id: %lu", (uint32_t)line[0]);
 
     /* Clear the line buffer */
   next_line:
     memset(line, 0, nread);
+    lines_read++;
   }
 
   /* Let getdelim re-allocate memory */
-  log_info("[Main][Statistics] Corrupted: %lu; Too short: %lu; Good: %lu.", corrupted_lines, short_lines, good_lines);
-  // log_info("[Main][Debug] P: %lu; B: %lu; E: %lu, D: %lu", p_c, b_c, e_c, d_c);
-
-  /* Close the packet log file we just read and remove it */
   free(line);
   line = NULL;
+
+  /* Close the packet log file we just read and remove it */
   fclose(f);
   unlink(new_fn);
 
@@ -376,11 +351,13 @@ int main_loop() {
 
   /* Only log when enough queries went through, otherwise we would log too much */
   if (q_sent > 2048) {
-    log_info("[Main][Statistics] Sent %d queries and dropped %d packets in %.2f seconds", q_sent, q_dropped, total_seconds);
+    log_info("[Main][Statistics] Sent %lu queries; dropped %lu out-of-order packets; read %lu lines; corrupted %lu lines; time %.2f seconds", q_sent, q_dropped, lines_read, lines_dropped, total_seconds);
     postgres_stats();
     q_sent = 0;
     q_dropped = 0;
     total_seconds = 0;
+    lines_read = 0;
+    lines_dropped = 0;
   }
 
   return 0;
