@@ -313,7 +313,7 @@ int main_loop() {
 
     /* Clear the line buffer */
   next_line:
-    memset(line, 0, nread);
+    memset(line, 0, line_len);
     lines_read++;
   }
 
