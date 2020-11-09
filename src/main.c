@@ -30,7 +30,7 @@
  * I know this is bad since this is actually a valid SQL UTF-8 character.
  * TODO: Implement "getdelim" with 16-bit or 32-bit delimiters.
  */
-static const char DELIMITER = '~';
+static const char delimiter = '~';
 #define LIST_SIZE 4096
 
 #include "helpers.h"
@@ -182,7 +182,7 @@ int main_loop() {
     return 1;
   }
 
-  while ((nread = getdelim(&line, &line_len, DELIMITER, f)) > 0) {
+  while ((nread = getdelim(&line, &line_len, delimiter, f)) > 0) {
     /* Not enough data to be a valid line.
      *
      * 5 bytes would have the tag (char) & packet length (32-bit int)
@@ -193,7 +193,7 @@ int main_loop() {
     }
 
     /* Remove the delimiter */
-    if (line[nread - 1] == DELIMITER)
+    if (line[nread - 1] == delimiter)
       line[nread - 1] = '\0';
 
     /* Place the iterator at the beginning. */
