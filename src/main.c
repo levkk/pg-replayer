@@ -30,7 +30,7 @@
  * I know this is bad since this is actually a valid SQL UTF-8 character.
  * TODO: Implement "getdelim" with 16-bit or 32-bit delimiters.
  */
-static char DELIMITER = '~';
+static const char DELIMITER = '~';
 #define LIST_SIZE 4096
 
 #include "helpers.h"
