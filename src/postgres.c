@@ -170,6 +170,8 @@ static void postgres_pexec(struct PStatement *stmt, PGconn *conn) {
     NULL,
     0
   );
+
+  /* Will issue a rollback instead if error in query above */
   PQclear(PQexec(conn, "COMMIT"));
 
   switch (PQresultStatus(res)) {
