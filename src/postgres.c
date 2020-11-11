@@ -159,6 +159,9 @@ static void postgres_pexec(struct PStatement *stmt, PGconn *conn) {
       break;
   }
 
+  /*
+   * Hypothesis: 99.99% of queries are single-statement transactions.
+   */
   PQclear(PQexec(conn, "BEGIN"));
   PGresult *res = PQexecParams(
     conn,
