@@ -42,7 +42,7 @@ static const char delimiter = '~';
 static int erred = 0;
 
 /* Stats */
-static size_t q_sent = 0, q_dropped = 0, lines_read = 0, lines_dropped = 0;
+static size_t q_sent = 0, q_dropped = 0, lines_read = 0, lines_dropped = 0, lines_orphaned = 0;
 static double total_seconds = 0;
 
 /* Show extra info in logs. Used across the code base. */
@@ -148,7 +148,7 @@ int main_loop() {
   char *line = NULL, *it, *env_f_name;
   size_t line_len = 0;
   ssize_t nread;
-  int i, len;
+  int i;
   struct timeval start, end;
   double seconds;
 
@@ -325,22 +325,18 @@ int main_loop() {
   fclose(f);
   unlink(new_fn);
 
-  /* Clean up any orphaned statements.
+  /* Clean up any orphaned packets.
    *
    * They can become orphaned because packets are out-of-order in the packet log file
    * or have not been logged at all.
    */
-  len = 0;
   for (i = 0; i < LIST_SIZE; i++) {
     if (list[i] != NULL) {
       pstatement_free(list[i]);
       list[i] = NULL;
-      len++;
+      lines_orphaned++;
     }
   }
-
-  if (len > 0)
-    log_info("Orphaned queries: %lu", len);
 
   /* Benchmark how we did */
   gettimeofday(&end, NULL);
@@ -351,13 +347,14 @@ int main_loop() {
 
   /* Only log when enough queries went through, otherwise we would log too much */
   if (q_sent > 2048) {
-    log_info("[Main][Statistics] Sent %lu queries; dropped %lu out-of-order packets; read %lu lines; corrupted %lu lines; time %.2f seconds", q_sent, q_dropped, lines_read, lines_dropped, total_seconds);
+    log_info("[Main][Statistics] Sent %lu queries; read %lu packets; corrupted %lu packets; dropped %lu orphaned packets; dropped %lu out-of-order packets; time %.2f seconds", q_sent, q_dropped, lines_read, lines_dropped, lines_orphaned, total_seconds);
     postgres_stats();
     q_sent = 0;
     q_dropped = 0;
     total_seconds = 0;
     lines_read = 0;
     lines_dropped = 0;
+    lines_orphaned = 0;
   }
 
   return 0;
