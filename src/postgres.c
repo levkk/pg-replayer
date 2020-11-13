@@ -19,9 +19,11 @@
 #include "replayer.h"
 #include "statement.h"
 #include "helpers.h"
+#include "client.h"
 
 #define POOL_SIZE 40
 #define MAX_STATEMENTS_PER_TRANSACTION 10
+#define CLIENT_QUEUE_SIZE 4096
 
 /*
  * Multiplex connections.
@@ -29,6 +31,9 @@
 static PGconn *conns[POOL_SIZE] = { NULL };
 static pthread_mutex_t locks[POOL_SIZE];
 static size_t stmt_cnt[POOL_SIZE] = { 0 };
+
+static struct Client *queue[CLIENT_QUEUE_SIZE] = { NULL };
+static pthread_mutex_t queue_lock;
 
 static pthread_t threads[POOL_SIZE];
 static int thread_ids[POOL_SIZE];
@@ -53,6 +58,26 @@ static int ignore_statement(char *stmt);
 static void *postgres_worker(void *arg);
 static void postgres_pexec(struct PStatement *stmt, PGconn *conn);
 
+static struct Client *client_find(uint32_t client_id) {
+  int i;
+  struct Client *result = NULL;
+
+  pthread_mutex_lock(&queue_lock);
+  for (i = 0; i < CLIENT_QUEUE_SIZE; i++) {
+    if (queue[i] != NULL) {
+      if (queue[i]->client_id == client_id) {
+        result = queue[i];
+        queue[i] = NULL;
+        goto unlock;
+      }
+    }
+  }
+
+unlock:
+  pthread_mutex_unlock(&queue_lock);
+  return result;
+}
+
 /*
  * Initialize the pool.
  */
@@ -71,6 +96,8 @@ int postgres_init(void) {
   }
 
   log_info("Creating a pool of %d connections", POOL_SIZE);
+
+  pthread_mutex_init(&queue_lock, NULL);
 
   for (i = 0; i < POOL_SIZE; i++) {
     assert(conns[i] == NULL);
@@ -121,12 +148,12 @@ static void *postgres_worker(void *arg) {
     nread = read(pipes[0], &stmt, sizeof(stmt));
 
     if (nread != sizeof(stmt)) {
-      log_info("[%d] partial read", id);
+      log_info("[Postgres][%d] partial read", id);
       abort(); /* No partial reads on 8 bytes of data, but if that happens, blow up */
     }
 
     if (stmt == NULL) {
-      log_info("[%d] Null pointer in work queue", id);
+      log_info("[Postgres][%d] Null pointer in work queue", id);
       continue;
     }
 

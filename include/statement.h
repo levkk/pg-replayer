@@ -1,3 +1,5 @@
+#ifndef STATEMENT_H
+#define STATEMENT_H
 /*
  * Prepared statement.
  */
@@ -18,3 +20,5 @@ struct PStatement *pstatement_init(char *query, uint32_t client_id);
 void pstatement_add_param(struct PStatement *stmt, struct Parameter *param);
 void pstatement_debug(struct PStatement *stmt);
 void pstatement_free(struct PStatement *stmt);
+
+#endif
