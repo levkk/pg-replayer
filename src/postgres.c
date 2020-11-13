@@ -159,6 +159,7 @@ static void postgres_pexec(struct PStatement *stmt, PGconn *conn) {
       break;
   }
 
+  PQclear(PQexec(conn, "BEGIN"));
   PGresult *res = PQexecParams(
     conn,
     stmt->query,
@@ -169,6 +170,7 @@ static void postgres_pexec(struct PStatement *stmt, PGconn *conn) {
     NULL,
     0
   );
+  PQclear(PQexec(conn, "COMMIT")); /* will rollback if error */
 
   switch (PQresultStatus(res)) {
     case PGRES_TUPLES_OK:
