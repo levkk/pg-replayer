@@ -132,12 +132,14 @@ static void *postgres_worker(void *arg) {
 
     __atomic_add_fetch(&consumed, 1, __ATOMIC_SEQ_CST);
 
+    if (DEBUG >= 2)
+      log_info("[Postgres] Waiting on connection %lu to become available", stmt->client_id % POOL_SIZE);
+
     /* Bind a connection to a client and execute query in thread */
-    if (DEBUG)
-      log_info("Waiting on %lu to become available", stmt->client_id);
     pthread_mutex_lock(&locks[stmt->client_id % POOL_SIZE]);
-    if (DEBUG)
-      log_info("Executing on %lu", stmt->client_id);
+
+    if (DEBUG >= 2)
+      log_info("[Postgres] Executing on connection %lu", stmt->client_id % POOL_SIZE);
 
     conn = conns[stmt->client_id % POOL_SIZE];
     postgres_pexec(stmt, conn);
@@ -198,9 +200,11 @@ static void postgres_pexec(struct PStatement *stmt, PGconn *conn) {
 
     case PQTRANS_INTRANS: {
       /* We likely missed a COMMIT, let's not drag this longer than we have to */
+      stmt_cnt[conn_idx]++; /* Not a race because it's 1 conn/thread */
       if (stmt_cnt[conn_idx] > MAX_STATEMENTS_PER_TRANSACTION) {
         PQclear(PQexec(conn, "COMMIT"));
         __atomic_add_fetch(&cut_short, 1, __ATOMIC_SEQ_CST);
+        stmt_cnt[conn_idx] = 0;
       }
       break;
     }
