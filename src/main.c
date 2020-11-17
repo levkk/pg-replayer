@@ -203,10 +203,19 @@ int main_loop() {
     /* Parse reload command if supplied */
     if (nread > 6) {
       if (strnstr(line, reload_command, MIN(10, nread)) != NULL) {
+        /*
+         * Clean up
+         */
         free(line);
         fclose(f);
         unlink(new_fn);
-        cleanup(SIGHUP); /* signal is irrelevant; program will exit now */
+
+        /*
+         * Signal is irrelevant, we are exiting.
+         * Entrypoint which launched us is responsible for restarting us
+         * with new environment variables loaded.
+         */
+        cleanup(SIGHUP);
       }
     }
 
