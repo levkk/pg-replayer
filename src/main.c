@@ -36,7 +36,7 @@ static const char delimiter = '~';
  * Bouncer passes us the RELOAD command so we
  * can restart the replayer.
  */
-static const char reload_command = 'RELOAD';
+static const char *reload_command = "RELOAD";
 
 #define LIST_SIZE 4096
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
@@ -67,6 +67,8 @@ static struct PStatement *list[4098] = { NULL };
   } \
   it += offset; \
   } while (0);
+
+void cleanup(int);
 
 /*
  * Will execute a preparted statement against a connection in the pool.
@@ -215,6 +217,7 @@ int main_loop() {
          * Entrypoint which launched us is responsible for restarting us
          * with new environment variables loaded.
          */
+        log_info("Got RELOAD command");
         cleanup(SIGHUP);
       }
     }
