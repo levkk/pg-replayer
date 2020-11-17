@@ -31,7 +31,15 @@
  * TODO: Implement "getdelim" with 16-bit or 32-bit delimiters.
  */
 static const char delimiter = '~';
+
+/*
+ * Bouncer passes us the RELOAD command so we
+ * can restart the replayer.
+ */
+static const char reload_command = 'RELOAD';
+
 #define LIST_SIZE 4096
+#define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 
 #include "helpers.h"
 #include "statement.h"
@@ -190,6 +198,16 @@ int main_loop() {
     if (nread < 5) {
       lines_dropped++;
       continue;
+    }
+
+    /* Parse reload command if supplied */
+    if (nread > 6) {
+      if (strnstr(line, reload_command, MIN(10, nread)) != NULL) {
+        free(line);
+        fclose(f);
+        unlink(new_fn);
+        cleanup(SIGHUP); /* signal is irrelevant; program will exit now */
+      }
     }
 
     /* Remove the delimiter */
